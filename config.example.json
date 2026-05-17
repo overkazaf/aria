@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy this file to ~/.config/aria/config.json and fill in your own tokens. See SETUP.md for instructions on obtaining each value.",
+
+  "accessToken":     "<YOUR_APPLE_MUSIC_WEB_PLAYER_JWT>",
+  "mediaUserToken":  "<YOUR_MEDIA_USER_TOKEN>",
+  "devicePath":      "/optional/absolute/path/to/your.wvd",
+
+  "_notes": {
+    "accessToken":    "Bearer JWT from beta.music.apple.com (DevTools → Network → Authorization header). Rotates frequently; the service will auto-refresh if omitted.",
+    "mediaUserToken": "From a logged-in Apple Music web session (DevTools → Application → Cookies → media-user-token).",
+    "devicePath":     "Optional. If omitted, the service scans $ARIA_WVD_DIR (~/.config/aria/wvd) for a *.wvd file."
+  }
+}

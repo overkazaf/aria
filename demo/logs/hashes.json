@@ -1,0 +1,12 @@
+[
+  {
+    "path": "audio/signal.wav",
+    "size": 3528044,
+    "sha256": "d956c513aa0d6879999d752e93f4f4cea3cd8ecce0f8636c0a6fc19dd1ef9760"
+  },
+  {
+    "path": "audio/signal_alac.m4a",
+    "size": 1548963,
+    "sha256": "49339e96acbf8095f26d749b05b28bdcc5c1a59d6ca3196031d4bb2bc0afb863"
+  }
+]

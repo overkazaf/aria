@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+*.wvd
+config.amcli
+rootfs/
+*.m4a
+*.zip
+*.bin
+/out*/
+/static/architecture.png
+native_decrypt/aria_client
+native_decrypt/decrypt_samples

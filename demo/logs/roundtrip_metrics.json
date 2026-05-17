@@ -1,0 +1,8 @@
+{
+  "samples_compared": 441000,
+  "peak_abs_diff": 0.0,
+  "peak_diff_dbfs": -400.0,
+  "rms_diff_left": 0.0,
+  "rms_diff_right": 0.0,
+  "lossless_match": true
+}
