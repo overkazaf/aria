@@ -19,7 +19,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -38,8 +38,8 @@ DEVICE_DIR = Path(os.environ.get(
 @dataclass
 class AacResult:
     song_id: str
-    key: str
-    stream_url: str
+    key: str = field(repr=False)
+    stream_url: str = field(repr=False)
     out_path: str
     size: int
 

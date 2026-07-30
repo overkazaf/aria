@@ -56,11 +56,13 @@ songs (3 results):
   Traits:   ['atmos', 'hi-res-lossless', 'lossless', 'lossy-stereo', 'spatial']
   ADM:      True
 
->>> curl -o song.m4a http://localhost:8899/download/1440841263?token=****
+>>> curl -H "Authorization: Bearer $API_TOKEN" -o song.m4a \
+...   http://localhost:8899/download/1440841263
   AAC downloaded: 6.9 MB in 0.2s
   codec_name=aac, sample_rate=44100, channels=2
 
->>> curl -o song.m4a "http://localhost:8899/download/1440841263?fmt=alac&token=****"
+>>> curl -H "Authorization: Bearer $API_TOKEN" -o song.m4a \
+...   "http://localhost:8899/download/1440841263?fmt=alac"
   ALAC downloaded: 61.6 MB in 6.4s
   codec_name=alac, sample_rate=88200, channels=2, bits_per_raw_sample=24
 ```
@@ -96,10 +98,14 @@ python cli.py song 1440841263
 python cli.py download 1440841263 --fmt alac -o ./music
 
 # 3b. HTTP API mode
+export API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 python server.py --port 8899
-curl "http://localhost:8899/search?q=Beatles&token=YOUR_TOKEN"
-curl -o song.m4a "http://localhost:8899/download/1440841263?token=YOUR_TOKEN"
-curl -o song.m4a "http://localhost:8899/download/1440841263?fmt=alac&token=YOUR_TOKEN"
+curl -H "Authorization: Bearer $API_TOKEN" \
+  "http://localhost:8899/search?q=Beatles"
+curl -H "Authorization: Bearer $API_TOKEN" \
+  -o song.m4a "http://localhost:8899/download/1440841263"
+curl -H "Authorization: Bearer $API_TOKEN" \
+  -o song.m4a "http://localhost:8899/download/1440841263?fmt=alac"
 ```
 
 ## CLI Usage
@@ -124,7 +130,10 @@ python cli.py download 1440841263 1441164589 --fmt alac -o ./music
 | GET | `/album/<id>/download` | Download album as ZIP |
 | POST | `/batch` | Batch download |
 
-All endpoints except `/` and `/health` require `?token=` or `X-Token` header.
+All endpoints except `/` and `/health` require `API_TOKEN` to be set on the
+server and supplied by clients as `Authorization: Bearer TOKEN` or `X-Token`.
+Query-string `?token=` is accepted for local compatibility, but headers are
+preferred so tokens do not end up in URLs and access logs.
 
 ## Modules
 

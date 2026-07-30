@@ -19,6 +19,7 @@ import json
 import shutil
 import tempfile
 import base64
+import secrets
 from pathlib import Path
 
 from flask import Flask, request, jsonify, send_file, send_from_directory
@@ -29,7 +30,7 @@ from am_alac import apple_api, aria_rpc, m3u8_select, m4s_parser, m4a_writer, de
 
 app = Flask(__name__, static_folder="static")
 
-API_TOKEN = os.environ.get("API_TOKEN", "jtr")
+API_TOKEN = os.environ.get("API_TOKEN") or None
 MAX_ALBUM_TRACKS = int(os.environ.get("MAX_ALBUM_TRACKS", "30"))
 MAX_BATCH_SIZE = int(os.environ.get("MAX_BATCH_SIZE", "50"))
 DOWNLOAD_TIMEOUT_PER_TRACK = 60  # seconds
@@ -47,21 +48,105 @@ ARIA_CONFIG = Path(os.environ.get(
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 _FREE_PATHS = {"/", "/health", "/static/architecture.png"}
+_ADAM_ID_RE = re.compile(r"^[0-9]{1,32}$")
+_STOREFRONT_RE = re.compile(r"^[a-z]{2}$")
+_AUDIO_FORMATS = {"aac", "alac"}
+_SEARCH_TYPES = {"songs", "albums", "artists"}
+
+
+def _json_error(message: str, status: int = 400, **extra):
+    payload = {"error": message}
+    payload.update(extra)
+    return jsonify(payload), status
+
+
+def _request_token() -> str:
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return (request.headers.get("X-Token") or request.args.get("token") or "").strip()
+
 
 @app.before_request
 def _check_token():
     if request.path in _FREE_PATHS or request.path.startswith("/static/"):
         return
-    token = request.args.get("token") or request.headers.get("X-Token")
-    if token != API_TOKEN:
-        return jsonify({"error": "unauthorized — pass ?token= or X-Token header"}), 401
+    if not API_TOKEN:
+        return _json_error(
+            "server API token is not configured; set API_TOKEN before using protected endpoints",
+            503,
+        )
+    token = _request_token()
+    if not token or not secrets.compare_digest(token, API_TOKEN):
+        return _json_error(
+            "unauthorized - pass Authorization: Bearer TOKEN or X-Token header",
+            401,
+        )
 
 _session = decryptor.PersistentDecryptSession(
     host=ARIA_HOST, port=ARIA_DECRYPT_PORT)
 
 
 def _safe_filename(s: str) -> str:
-    return re.sub(r'[/\\<>:"|?*\x00-\x1f]', "_", s).strip(". ")
+    return re.sub(r'[/\\<>:"|?*\x00-\x1f]', "_", s).strip(". ") or "untitled"
+
+
+def _validate_adam_id(value: object, name: str = "id") -> str:
+    text = str(value or "").strip()
+    if not _ADAM_ID_RE.fullmatch(text):
+        raise ValueError(f"{name} must be ASCII digits")
+    return text
+
+
+def _validate_format(value: object) -> str:
+    fmt = str(value or "aac").strip().lower()
+    if fmt not in _AUDIO_FORMATS:
+        raise ValueError("fmt must be 'alac' or 'aac'")
+    return fmt
+
+
+def _request_int(name: str, default: int, *, min_value: int, max_value: int) -> int:
+    raw = request.args.get(name, str(default))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be an integer")
+    if not (min_value <= value <= max_value):
+        raise ValueError(f"{name} must be between {min_value} and {max_value}")
+    return value
+
+
+def _request_storefront() -> str:
+    sf = request.args.get("sf", STOREFRONT).strip().lower()
+    if not _STOREFRONT_RE.fullmatch(sf):
+        raise ValueError("sf must be a two-letter storefront code")
+    return sf
+
+
+def _request_search_types() -> list[str]:
+    raw = request.args.get("type", "songs,albums,artists")
+    types = [t.strip() for t in raw.split(",") if t.strip()]
+    if not types:
+        raise ValueError("type must include at least one search type")
+    invalid = sorted(set(types) - _SEARCH_TYPES)
+    if invalid:
+        raise ValueError(f"unsupported search type(s): {', '.join(invalid)}")
+    return types
+
+
+def _redact_error(exc: Exception) -> str:
+    msg = str(exc)
+    home = os.path.expanduser("~")
+    if home and home != "~":
+        msg = msg.replace(home, "~")
+    msg = msg.replace(str(ARIA_CONFIG), "$ARIA_CONFIG")
+    msg = re.sub(r"Bearer\s+eyJ[A-Za-z0-9_.-]+", "Bearer <redacted>", msg)
+    msg = re.sub(
+        r"(?i)\b(accessToken|mediaUserToken|token)(\s*[:=]\s*)['\"]?[^,'\"&\s)}]+",
+        r"\1\2<redacted>",
+        msg,
+    )
+    return msg[:500]
 
 
 def _load_aria_config() -> dict | None:
@@ -74,28 +159,34 @@ def _load_aria_config() -> dict | None:
         return None
     raw = ARIA_CONFIG.read_text().strip()
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
     except json.JSONDecodeError:
         try:
-            return json.loads(base64.b64decode(raw).decode())
+            data = json.loads(base64.b64decode(raw).decode())
         except Exception:
             return None
+    return data if isinstance(data, dict) else None
 
 
 def _get_apple_headers() -> dict:
     cfg = _load_aria_config()
-    if cfg:
-        return {
-            "Authorization": "Bearer " + cfg.get("accessToken", ""),
-            "Origin": "https://music.apple.com",
-            "Media-User-Token": cfg.get("mediaUserToken", ""),
-            "Content-Type": "application/json;charset=utf-8",
-        }
-    token = apple_api.get_web_token()
-    return {
-        "Authorization": "Bearer " + token,
+    headers = {
         "Origin": "https://music.apple.com",
+        "Content-Type": "application/json;charset=utf-8",
     }
+    token = ""
+    media_user_token = ""
+    if cfg:
+        token = str(cfg.get("accessToken") or "").strip()
+        media_user_token = str(cfg.get("mediaUserToken") or "").strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    if not token:
+        token = apple_api.get_web_token()
+    headers["Authorization"] = "Bearer " + token
+    if media_user_token:
+        headers["Media-User-Token"] = media_user_token
+    return headers
 
 
 def _apple_get(path: str, params: dict = None) -> dict:
@@ -115,6 +206,8 @@ def _fmt_artwork(artwork: dict, size: int = 600) -> str:
 
 
 def _get_cached_path(song_id: str, fmt: str) -> str:
+    song_id = _validate_adam_id(song_id, "song_id")
+    fmt = _validate_format(fmt)
     return os.path.join(CACHE_DIR, f"{song_id}.{fmt}.m4a")
 
 
@@ -161,39 +254,43 @@ def index():
 
 <h2>Authentication</h2>
 <p>All API endpoints (except <code>/</code> and <code>/health</code>) require a token.
-Pass it as query param <code>?token=TOKEN</code> or header <code>X-Token: TOKEN</code>.</p>
+Set <code>API_TOKEN</code> before starting the service and pass it as
+<code>Authorization: Bearer TOKEN</code> or header <code>X-Token: TOKEN</code>.</p>
 
 <h2>Examples</h2>
 <pre>
-TOKEN="jtr"
+export API_TOKEN="replace-with-a-long-random-token"
+python server.py --port 8899
+
+AUTH=(-H "Authorization: Bearer $API_TOKEN")
 
 # Search (paginated)
-curl "http://HOST:8899/search?q=Beatles&amp;type=songs&amp;limit=5&amp;token=$TOKEN"
+curl "${AUTH[@]}" "http://HOST:8899/search?q=Beatles&amp;type=songs&amp;limit=5"
 
 # Song detail
-curl "http://HOST:8899/song/1440841263?token=$TOKEN"
+curl "${AUTH[@]}" "http://HOST:8899/song/1440841263"
 
 # Album with tracks (paginated)
-curl "http://HOST:8899/album/1440857781?token=$TOKEN"
-curl "http://HOST:8899/album/1440857781?tracks_limit=10&amp;tracks_offset=0&amp;token=$TOKEN"
+curl "${AUTH[@]}" "http://HOST:8899/album/1440857781"
+curl "${AUTH[@]}" "http://HOST:8899/album/1440857781?tracks_limit=10&amp;tracks_offset=0"
 
 # Artist with albums (paginated)
-curl "http://HOST:8899/artist/136975?token=$TOKEN"
+curl "${AUTH[@]}" "http://HOST:8899/artist/136975"
 
 # Artist albums standalone
-curl "http://HOST:8899/artist/136975/albums?limit=10&amp;offset=0&amp;token=$TOKEN"
+curl "${AUTH[@]}" "http://HOST:8899/artist/136975/albums?limit=10&amp;offset=0"
 
 # Download AAC (default)
-curl -o song.m4a "http://HOST:8899/download/1440841263?token=$TOKEN"
+curl "${AUTH[@]}" -o song.m4a "http://HOST:8899/download/1440841263"
 
 # Download Hi-Res ALAC
-curl -o song.m4a "http://HOST:8899/download/1440841263?fmt=alac&amp;token=$TOKEN"
+curl "${AUTH[@]}" -o song.m4a "http://HOST:8899/download/1440841263?fmt=alac"
 
 # Download entire album as ZIP (AAC)
-curl -o album.zip "http://HOST:8899/album/1440857781/download?token=$TOKEN"
+curl "${AUTH[@]}" -o album.zip "http://HOST:8899/album/1440857781/download"
 
 # Download entire album as ZIP (Hi-Res ALAC)
-curl -o album.zip "http://HOST:8899/album/1440857781/download?fmt=alac&amp;token=$TOKEN"
+curl "${AUTH[@]}" -o album.zip "http://HOST:8899/album/1440857781/download?fmt=alac"
 </pre>
 
 <h2>Modules</h2>
@@ -217,18 +314,21 @@ curl -o album.zip "http://HOST:8899/album/1440857781/download?fmt=alac&amp;token
 def search():
     q = request.args.get("q", "")
     if not q:
-        return jsonify({"error": "missing ?q= parameter"}), 400
-    types = request.args.get("type", "songs,albums,artists")
-    limit = request.args.get("limit", "10")
-    offset = request.args.get("offset", "0")
-    sf = request.args.get("sf", STOREFRONT)
+        return _json_error("missing ?q= parameter")
+    try:
+        types = _request_search_types()
+        limit = _request_int("limit", 10, min_value=1, max_value=25)
+        offset = _request_int("offset", 0, min_value=0, max_value=5000)
+        sf = _request_storefront()
+    except ValueError as e:
+        return _json_error(str(e))
 
     data = _apple_get(f"/v1/catalog/{sf}/search",
-                      {"term": q, "types": types, "limit": limit, "offset": offset})
+                      {"term": q, "types": ",".join(types),
+                       "limit": limit, "offset": offset})
 
     out = {}
-    for typ in types.split(","):
-        typ = typ.strip()
+    for typ in types:
         section = data.get("results", {}).get(typ, {})
         items = section.get("data", [])
         entries = []
@@ -260,7 +360,11 @@ def search():
 
 @app.route("/song/<song_id>")
 def song_info(song_id: str):
-    sf = request.args.get("sf", STOREFRONT)
+    try:
+        song_id = _validate_adam_id(song_id, "song_id")
+        sf = _request_storefront()
+    except ValueError as e:
+        return _json_error(str(e))
     data = _apple_get(f"/v1/catalog/{sf}/songs/{song_id}",
                       {"include": "albums,artists", "extend": "extendedAssetUrls"})
     item = data["data"][0]
@@ -300,9 +404,13 @@ def song_info(song_id: str):
 
 @app.route("/album/<album_id>")
 def album_info(album_id: str):
-    sf = request.args.get("sf", STOREFRONT)
-    tracks_limit = request.args.get("tracks_limit", "100")
-    tracks_offset = request.args.get("tracks_offset", "0")
+    try:
+        album_id = _validate_adam_id(album_id, "album_id")
+        sf = _request_storefront()
+        tracks_limit = _request_int("tracks_limit", 100, min_value=1, max_value=100)
+        tracks_offset = _request_int("tracks_offset", 0, min_value=0, max_value=5000)
+    except ValueError as e:
+        return _json_error(str(e))
 
     data = _apple_get(f"/v1/catalog/{sf}/albums/{album_id}",
                       {"include": "tracks,artists"})
@@ -311,8 +419,8 @@ def album_info(album_id: str):
     rels = item.get("relationships", {})
 
     all_tracks = rels.get("tracks", {}).get("data", [])
-    off = int(tracks_offset)
-    lim = int(tracks_limit)
+    off = tracks_offset
+    lim = tracks_limit
     page = all_tracks[off:off + lim]
 
     tracks = []
@@ -361,9 +469,13 @@ def album_info(album_id: str):
 
 @app.route("/artist/<artist_id>")
 def artist_info(artist_id: str):
-    sf = request.args.get("sf", STOREFRONT)
-    albums_limit = request.args.get("albums_limit", "25")
-    albums_offset = request.args.get("albums_offset", "0")
+    try:
+        artist_id = _validate_adam_id(artist_id, "artist_id")
+        sf = _request_storefront()
+        albums_limit = _request_int("albums_limit", 25, min_value=1, max_value=100)
+        albums_offset = _request_int("albums_offset", 0, min_value=0, max_value=5000)
+    except ValueError as e:
+        return _json_error(str(e))
 
     data = _apple_get(f"/v1/catalog/{sf}/artists/{artist_id}",
                       {"include": "albums"})
@@ -373,8 +485,8 @@ def artist_info(artist_id: str):
 
     all_albums = rels.get("albums", {}).get("data", [])
     albums_next = rels.get("albums", {}).get("next")
-    off = int(albums_offset)
-    lim = int(albums_limit)
+    off = albums_offset
+    lim = albums_limit
     page = all_albums[off:off + lim]
 
     albums = []
@@ -403,9 +515,13 @@ def artist_info(artist_id: str):
 @app.route("/artist/<artist_id>/albums")
 def artist_albums(artist_id: str):
     """Standalone paginated artist albums — uses Apple's native pagination."""
-    sf = request.args.get("sf", STOREFRONT)
-    limit = request.args.get("limit", "25")
-    offset = request.args.get("offset", "0")
+    try:
+        artist_id = _validate_adam_id(artist_id, "artist_id")
+        sf = _request_storefront()
+        limit = _request_int("limit", 25, min_value=1, max_value=100)
+        offset = _request_int("offset", 0, min_value=0, max_value=5000)
+    except ValueError as e:
+        return _json_error(str(e))
 
     data = _apple_get(f"/v1/catalog/{sf}/artists/{artist_id}/albums",
                       {"limit": limit, "offset": offset})
@@ -437,9 +553,11 @@ def artist_albums(artist_id: str):
 
 @app.route("/download/<song_id>")
 def download_song(song_id: str):
-    fmt = request.args.get("fmt", "aac").lower()
-    if fmt not in ("alac", "aac"):
-        return jsonify({"error": "fmt must be 'alac' or 'aac'"}), 400
+    try:
+        song_id = _validate_adam_id(song_id, "song_id")
+        fmt = _validate_format(request.args.get("fmt", "aac"))
+    except ValueError as e:
+        return _json_error(str(e))
 
     cached = _get_cached_path(song_id, fmt)
     if os.path.isfile(cached):
@@ -458,7 +576,7 @@ def download_song(song_id: str):
         else:
             return _download_aac(song_id, cached)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json_error(_redact_error(e), 500)
 
 
 def _download_alac(song_id: str, out_path: str):
@@ -482,9 +600,9 @@ def _download_aac(song_id: str, out_path: str):
     try:
         result = aac_decrypt.download_aac(song_id, out_path)
     except FileNotFoundError as e:
-        return jsonify({"error": str(e)}), 501
+        return _json_error(_redact_error(e), 501)
     except Exception as e:
-        return jsonify({"error": f"AAC decrypt failed: {e}"}), 500
+        return _json_error(f"AAC decrypt failed: {_redact_error(e)}", 500)
     try:
         with apple_api.AppleMusicClient() as ac:
             song = ac.get_song(song_id, STOREFRONT)
@@ -520,16 +638,27 @@ def health():
 
 @app.route("/batch", methods=["POST"])
 def batch_download():
-    data = request.get_json(force=True)
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return _json_error("request body must be valid JSON")
+    if not isinstance(data, dict):
+        return _json_error("request body must be a JSON object")
     ids = data.get("ids", [])
-    fmt = data.get("fmt", "aac")
+    if not isinstance(ids, list):
+        return _json_error("ids must be a list")
+    try:
+        fmt = _validate_format(data.get("fmt", "aac"))
+        ids = [_validate_adam_id(sid, "ids[]") for sid in ids]
+    except ValueError as e:
+        return _json_error(str(e))
     if not ids:
-        return jsonify({"error": "ids list is empty"}), 400
+        return _json_error("ids list is empty")
     if len(ids) > MAX_BATCH_SIZE:
-        return jsonify({"error": f"max {MAX_BATCH_SIZE} ids per batch"}), 400
+        return _json_error(f"max {MAX_BATCH_SIZE} ids per batch")
     results = []
     for sid in ids:
-        cached = _get_cached_path(str(sid), fmt)
+        cached = _get_cached_path(sid, fmt)
         if os.path.isfile(cached):
             results.append({"id": sid, "status": "cached", "size": os.path.getsize(cached)})
             continue
@@ -537,17 +666,17 @@ def batch_download():
             if fmt == "alac":
                 with tempfile.TemporaryDirectory() as tmpdir:
                     r = decryptor.decrypt_one_track(
-                        song_id=str(sid), out_dir=tmpdir, storefront=STOREFRONT,
+                        song_id=sid, out_dir=tmpdir, storefront=STOREFRONT,
                         aria_host=ARIA_HOST, aria_decrypt_port=ARIA_DECRYPT_PORT,
                         aria_m3u8_port=ARIA_M3U8_PORT, _session=_session)
                     shutil.copy2(r.out_path, cached)
                 results.append({"id": sid, "status": "ok", "size": os.path.getsize(cached),
                                 "elapsed": round(r.elapsed_seconds, 2)})
             else:
-                aac_decrypt.download_aac(str(sid), cached)
+                aac_decrypt.download_aac(sid, cached)
                 results.append({"id": sid, "status": "ok", "size": os.path.getsize(cached)})
         except Exception as e:
-            results.append({"id": sid, "status": "error", "error": str(e)})
+            results.append({"id": sid, "status": "error", "error": _redact_error(e)})
     return jsonify({"results": results, "total": len(results)})
 
 
@@ -567,13 +696,13 @@ def album_download(album_id: str):
     """
     import zipfile
     import time as _time
-    import signal
 
-    fmt = request.args.get("fmt", "aac").lower()
-    if fmt not in ("alac", "aac"):
-        return jsonify({"error": "fmt must be 'alac' or 'aac'"}), 400
-
-    sf = request.args.get("sf", STOREFRONT)
+    try:
+        album_id = _validate_adam_id(album_id, "album_id")
+        fmt = _validate_format(request.args.get("fmt", "aac"))
+        sf = _request_storefront()
+    except ValueError as e:
+        return _json_error(str(e))
 
     # Check ZIP cache first
     zip_cache = os.path.join(CACHE_DIR, f"album_{album_id}_{fmt}.zip")
@@ -591,7 +720,7 @@ def album_download(album_id: str):
         data = _apple_get(f"/v1/catalog/{sf}/albums/{album_id}",
                           {"include": "tracks"})
     except Exception as e:
-        return jsonify({"error": f"album fetch failed: {e}"}), 404
+        return _json_error(f"album fetch failed: {_redact_error(e)}", 404)
 
     item = data["data"][0]
     a = item["attributes"]
@@ -601,14 +730,14 @@ def album_download(album_id: str):
 
     all_tracks = item.get("relationships", {}).get("tracks", {}).get("data", [])
     if not all_tracks:
-        return jsonify({"error": "album has no tracks"}), 404
+        return _json_error("album has no tracks", 404)
 
     if len(all_tracks) > MAX_ALBUM_TRACKS:
-        return jsonify({
-            "error": f"album has {len(all_tracks)} tracks, max allowed is {MAX_ALBUM_TRACKS}",
-            "track_count": len(all_tracks),
-            "limit": MAX_ALBUM_TRACKS,
-        }), 400
+        return _json_error(
+            f"album has {len(all_tracks)} tracks, max allowed is {MAX_ALBUM_TRACKS}",
+            track_count=len(all_tracks),
+            limit=MAX_ALBUM_TRACKS,
+        )
 
     track_files = []
     errors = []
@@ -637,7 +766,7 @@ def album_download(album_id: str):
                     aac_decrypt.download_aac(sid, cached)
             except Exception as e:
                 errors.append({"id": sid, "track": f"{disc_num}-{track_num} {name}",
-                               "error": str(e)[:100]})
+                               "error": _redact_error(e)[:100]})
                 continue
             elapsed = _time.monotonic() - t0
             app.logger.info(f"[album {album_id}] track {idx+1}/{len(all_tracks)} "
@@ -649,7 +778,7 @@ def album_download(album_id: str):
     total_time = _time.monotonic() - t_start
 
     if not track_files:
-        return jsonify({"error": "no tracks downloaded", "details": errors}), 500
+        return _json_error("no tracks downloaded", 500, details=errors)
 
     with zipfile.ZipFile(zip_cache, "w", zipfile.ZIP_STORED) as zf:
         folder = f"{artist_name} - {album_name}"
@@ -675,4 +804,7 @@ if __name__ == "__main__":
     print(f"AM Service on {args.host}:{args.port}")
     print(f"  aria: {ARIA_HOST}:{ARIA_DECRYPT_PORT}/{ARIA_M3U8_PORT}")
     print(f"  cache: {CACHE_DIR}")
+    print(f"  auth: {'configured' if API_TOKEN else 'missing API_TOKEN'}")
+    if not API_TOKEN:
+        print("  warning: protected endpoints return 503 until API_TOKEN is set")
     app.run(host=args.host, port=args.port, threaded=True)

@@ -26,7 +26,28 @@ External binaries on `PATH`:
 | `mp4decrypt` (Bento4) | AAC Widevine decryption step | https://www.bento4.com |
 | `asciinema` | re-recording the demo cast (optional) | `pip install asciinema` |
 
-## 2. Apple Music tokens — required for `/search`, `/song`, `/album`, AAC download
+## 2. Service API token — required for protected HTTP endpoints
+
+`server.py` does not ship with a default API token. Set one before
+starting the service:
+
+```bash
+export API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+python server.py --port 8899
+```
+
+Use the token in a header:
+
+```bash
+curl -H "Authorization: Bearer $API_TOKEN" \
+  "http://localhost:8899/search?q=Beatles"
+```
+
+`X-Token: $API_TOKEN` is also accepted. `?token=` remains available for
+local compatibility, but headers are preferred because URLs are often
+saved in shell history, browser history, and access logs.
+
+## 3. Apple Music tokens — required for `/search`, `/song`, `/album`, AAC download
 
 ```bash
 mkdir -p ~/.config/aria
@@ -44,7 +65,7 @@ Fields:
 
 Override the config location with `ARIA_CONFIG=/some/other/path.json`.
 
-## 3. Widevine device file (`.wvd`) — required for AAC download
+## 4. Widevine device file (`.wvd`) — required for AAC download
 
 Apple Music's AAC tier is protected by Widevine. You need a Widevine
 device blob to issue licenses. This is **not** supplied here:
@@ -60,7 +81,7 @@ those is your responsibility and out of scope for this repository.
 
 Override with `ARIA_WVD_DIR=/some/other/dir`.
 
-## 4. ALAC path — requires an external `aria` DRM helper
+## 5. ALAC path — requires an external `aria` DRM helper
 
 The ALAC (Hi-Res Lossless) path delegates the FairPlay decryption to a
 separate, locally-running TCP service that this repository **does NOT
@@ -68,7 +89,7 @@ ship**. The Python code only speaks the wire protocol to it.
 
 You have two options:
 
-### Option 4a — real helper (decrypts actual content)
+### Option A — real helper (decrypts actual content)
 
 ```bash
 # Start your own helper (out of scope for this repo)
@@ -79,7 +100,7 @@ The wire protocol the helper must speak is fully specified in
 [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — feel free to implement your
 own.
 
-### Option 4b — stub helper (NOP-decrypt, smoke-tests only)
+### Option B — stub helper (NOP-decrypt, smoke-tests only)
 
 For protocol / integration testing without any real DRM material, this
 repo ships a stub that speaks the protocol correctly but returns
@@ -107,7 +128,7 @@ If no helper is available (real or stub), only the AAC path works.
 `server.py` will still start; ALAC requests fail when the TCP connect
 times out.
 
-## 5. Native C client (optional, fastest)
+## 6. Native C client (optional, fastest)
 
 ```bash
 cd native_decrypt
@@ -117,12 +138,16 @@ make            # builds aria_client + decrypt_samples
 `am_alac/native_bridge.py` will spawn `./aria_client` if present;
 otherwise the pure-Python `aria_rpc.py` path is used.
 
-## 6. Verify
+## 7. Verify
 
 ```bash
 # health check, no tokens needed
 python server.py --port 8899 &
 curl http://localhost:8899/health
+
+# protected endpoint, API_TOKEN required
+curl -H "Authorization: Bearer $API_TOKEN" \
+  "http://localhost:8899/search?q=Beatles"
 
 # self-test pipeline (no Apple servers contacted)
 cd demo && ./run_demo.sh
@@ -134,7 +159,7 @@ cd demo && ./run_demo.sh
 |---------|-------|--------|
 | `/health` | nothing | ✅ |
 | Self-test (`demo/`) | ffmpeg | ✅ |
-| `/search` / `/song` / `/album` / `/artist` | accessToken (or auto-bootstrap) | ✅ |
+| `/search` / `/song` / `/album` / `/artist` | API_TOKEN + accessToken (or auto-bootstrap) | ✅ |
 | AAC `/download` | tokens + `.wvd` + `mp4decrypt` | ⚠️ user-supplied |
 | ALAC `/download?fmt=alac` (real) | aria DRM helper running on 47010/47020 | ⚠️ NOT shipped — bring your own (see `docs/PROTOCOL.md`) |
 | ALAC `/download?fmt=alac` (smoke-test only) | `tools/stub_aria_daemon.py` | ✅ NOP-decrypt; protocol validated but output audio is garbage |
