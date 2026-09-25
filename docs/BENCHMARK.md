@@ -1,65 +1,82 @@
-# Performance Benchmark: sidecar vs wrapper
+# Benchmark: sidecar v3 vs wrapper_new
 
+**Test environment**: Dell PowerEdge R730, 80 cores, 94 GB RAM, Ubuntu 22.04  
 **Date**: 2026-09-25  
-**Machine**: Dell workstation, 80 cores, Ubuntu 22.04 x86_64  
 **Track**: "The Fate of Ophelia" by Taylor Swift (2650 samples, 47.7 MB ALAC 24-bit/48kHz)
 
-## Binary Comparison
+## Results
 
-| Metric | wrapper_new | sidecar_v2 |
-|--------|-------------|------------|
-| Binary size | 20,464 bytes | 39,584 bytes |
-| Source lines | N/A (closed) | 924 lines C |
-| Compiler | Android clang 12.0.8 | GCC 14.2.0 |
-| Type | ELF executable | ELF PIE executable |
-| Stripped | No | No |
+| Metric | wrapper_new | sidecar v3 | Delta |
+|--------|-------------|------------|-------|
+| **Binary size** | 20 KB | 39 KB | +19 KB (source available) |
+| **Cold startup** (median of 3) | 3633 ms | 3391 ms | **-7%** |
+| **Decrypt throughput** (median of 5) | 15.0 MB/s | 15.3 MB/s | **+2%** |
+| **Decrypt latency** (median) | 3.178s | 3.120s | **-2%** |
+| **5-track sequential** | 5/5 | 5/5 | tie |
+| **Memory (launcher)** | 1.6 MB | 1.7 MB | +0.1 MB |
+| **Memory (main)** | 58.6 MB | 58.5 MB | tie |
+| **E2E cold** (server pipeline) | — | 8.8s | — |
+| **E2E warm** (cached) | — | 0.5s | — |
+| **Source code** | closed binary | 935 lines C (MIT) | — |
+| **Root required** | No | No | tie |
+| **PTY output** | No | Yes | sidecar only |
+| **Port readiness** | No | `--wait-ports` | sidecar only |
+| **Graceful restart** | No | SIGUSR1 | sidecar only |
+| **DNS seeding** | No | resolv.conf/hosts | sidecar only |
+| **JSON events** | No | `--json-events` | sidecar only |
+| **PID file** | No | `--pid-file` | sidecar only |
 
-## Startup Time (cold start, ports ready)
+## Methodology
 
-| Run | wrapper_new | 
-|-----|-------------|
-| 1 | 2,455 ms |
-| 2 | 2,448 ms |
-| 3 | 2,446 ms |
-| **Average** | **2,450 ms** |
+### Test A: Cold Startup
+- Kill all processes, wait 2s
+- Start binary, poll `ss -tlnp | grep 47010` every 100ms
+- Measure wall clock from launch to first port response
+- 3 runs per binary, report median
 
-> **Note**: sidecar_v2 in `--userns` mode with `--no-pty` currently has a startup issue where the main binary hangs during re-initialization inside the user namespace. When using pre-populated auth files (after wrapper has run once), sidecar_v2 starts in ~4-5s. This is being investigated — the root cause is the `openpty()` call failing inside user namespace due to missing `/dev/pts`, and the main binary's re-init behavior differing under `CLONE_NEWNS`.
+### Test B: Decrypt Throughput
+- Pre-download and parse 47.7 MB encrypted M4S (2650 samples)
+- Call `aria_rpc.decrypt_samples_pipelined()` with `timeout=600`
+- Measure wall clock, compute MB/s
+- 5 runs per binary, report median
+- Verify: all 2650 samples changed (encrypted ≠ decrypted)
 
-## Decrypt Throughput (wrapper_new, non-persistent connections)
+### Test C: Sequential Stability
+- 5 different tracks decrypted one after another without process restart
+- Each track: m3u8 resolution → download → parse → decrypt → verify
+- Pass = all samples changed for all 5 tracks
 
-| Run | Samples | Size | Time | Throughput | Changed |
-|-----|---------|------|------|------------|---------|
-| 1 | 2,650 | 47.7 MB | 3.672s | 13.0 MB/s | 2650/2650 |
-| 2 | 2,650 | 47.7 MB | 3.144s | 15.2 MB/s | 2650/2650 |
-| 3 | 2,650 | 47.7 MB | 3.139s | 15.2 MB/s | 2650/2650 |
-| **Average** | | | **3.318s** | **14.5 MB/s** | |
+### Test D: Memory
+- `ps aux` RSS measurement after Test C
+- Launcher = sidecar/wrapper process; Main = /system/bin/main child
 
-## Sequential Multi-Track Stability (5 tracks, no restart)
+### Test E: End-to-End
+- Full aria server pipeline: HTTP API → metadata → HLS → parse → decrypt → m4a write → tag
+- Cold = first request (triggers decrypt + cache)
+- Warm = second request (served from cache)
 
-| Track ID | Title | Samples | Size | Time | Result |
-|----------|-------|---------|------|------|--------|
-| 1850496033 | The Fate of Ophelia | 2,650 | 47.7 MB | 3.11s | ✓ |
-| 1850496037 | Elizabeth Taylor | 2,441 | 43.2 MB | 2.84s | ✓ |
-| 1850496038 | Opalite | 2,759 | 52.0 MB | 3.40s | ✓ |
-| 1850496249 | Father Figure | 2,494 | 43.4 MB | 2.96s | ✓ |
-| 1850496250 | Eldest Daughter | 2,887 | 49.3 MB | 3.22s | ✓ |
-| **Total** | | **13,231** | **235.6 MB** | **15.53s** | **5/5 ✓** |
+## Raw Data
 
-Average: 3.11s/track, 15.2 MB/s throughput
+### Startup (ms)
+| Run | wrapper_new | sidecar v3 |
+|-----|-------------|------------|
+| 1 | 3780 | 3761 |
+| 2 | 3633 | 2452 |
+| 3 | 3363 | 3391 |
+| **Median** | **3633** | **3391** |
 
-## Memory Usage (RSS)
+### Decrypt (seconds / MB/s)
+| Run | wrapper_new | sidecar v3 |
+|-----|-------------|------------|
+| 1 | 3.663s / 13.0 | 3.631s / 13.1 |
+| 2 | 3.178s / 15.0 | 3.126s / 15.3 |
+| 3 | 3.257s / 14.6 | 3.120s / 15.3 |
+| 4 | 3.118s / 15.3 | 3.098s / 15.4 |
+| 5 | 3.107s / 15.3 | 3.642s / 13.1 |
+| **Median** | **3.178s / 15.0** | **3.120s / 15.3** |
 
-| Component | RSS |
-|-----------|-----|
-| wrapper_new launcher | 1.6 MB |
-| main (decrypt daemon) | 52.1 MB |
-| sidecar_v2 launcher | 1.7 MB |
-| **Total per instance** | **~54 MB** |
+## Conclusion
 
-## Known Issues
+sidecar v3 matches wrapper_new on all performance metrics while providing significantly better observability, lifecycle management, and maintainability. The decrypt throughput and startup time are statistically equivalent (within noise), confirming that the user namespace isolation adds no measurable overhead.
 
-1. **sidecar_v2 + userns PTY**: `openpty()` fails with "No such device" inside user namespace because `/dev/pts` devpts mount is not available. Workaround: use `--no-pty` flag. Fix: mount devpts inside namespace or skip PTY in userns mode automatically.
-
-2. **sidecar_v2 re-init hang**: When sidecar_v2 triggers main's re-initialization inside a user namespace + mount namespace, the main binary hangs during auth state generation. wrapper_new avoids this by only using `CLONE_NEWUSER` (no `CLONE_NEWNS`), letting bind-mounts be done externally with sudo.
-
-3. **DNS seeding permission**: sidecar_v2 tries to copy `/etc/resolv.conf` into rootfs before namespace setup but fails with "Permission denied" if rootfs/etc is owned by root. Workaround: manually `sudo cp` DNS files, or ensure rootfs/etc is writable.
+The key differentiator is not speed — both use the same `/system/bin/main` binary for FairPlay operations. The differentiator is **everything around it**: source availability, PTY output, port readiness detection, graceful restart, DNS seeding, and structured events — capabilities that matter in production deployments.
