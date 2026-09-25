@@ -5,23 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>aria — Apple Music 无损音频服务</title>
 <style>
-:root {
-  --bg: #ffffff;
-  --bg-card: #f6f8fa;
-  --bg-code: #f0f2f5;
-  --border: #d0d7de;
-  --text: #1f2328;
-  --text-dim: #656d76;
-  --text-bright: #1f2328;
-  --accent: #0969da;
-  --green: #1a7f37;
-  --yellow: #9a6700;
-  --red: #cf222e;
-  --purple: #8250df;
-  --orange: #bc4c00;
-  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-}
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#bc8cff;--red:#f85149;--orange:#d29922}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;line-height:1.7}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
@@ -31,9 +15,9 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .hero h1 span{color:var(--accent)}
 .hero .tagline{color:var(--dim);font-size:1.2em;max-width:640px;margin:0 auto 24px}
 .hero .badges span{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.85em;margin:4px;font-weight:600}
-.badge-alac{background:#e6f4e6;color:var(--green);border:1px solid #1a7f37}
-.badge-aac{background:#e6f0fa;color:var(--accent);border:1px solid #0969da}
-.badge-api{background:#f0e6fa;color:var(--purple);border:1px solid #6639ba}
+.badge-alac{background:#1a3a1a;color:var(--green);border:1px solid #238636}
+.badge-aac{background:#1a2a3a;color:var(--accent);border:1px solid #1f6feb}
+.badge-api{background:#2a1a3a;color:var(--purple);border:1px solid #8957e5}
 section{padding:48px 0;border-bottom:1px solid var(--border)}
 section:last-child{border-bottom:none}
 h2{font-size:1.8em;margin-bottom:24px;color:var(--text);font-weight:700}
@@ -48,7 +32,7 @@ table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.92em}
 th,td{padding:10px 14px;text-align:left;border:1px solid var(--border)}
 th{background:var(--surface);color:var(--accent);font-weight:600}
 td{color:var(--text)}
-tr:nth-child(even) td{background:#f6f8fa}
+tr:nth-child(even) td{background:rgba(22,27,34,0.5)}
 code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.9em;font-family:'SF Mono',Consolas,monospace;color:var(--orange)}
 pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85em;line-height:1.6;margin:12px 0}
 pre code{background:none;padding:0}
@@ -64,37 +48,6 @@ pre code{background:none;padding:0}
 .config-val{color:var(--green);font-family:monospace}
 footer{padding:32px 0;text-align:center;color:var(--dim);font-size:0.85em;border-top:1px solid var(--border)}
 footer a{color:var(--accent)}
-
-/* Floating Language Switcher */
-.lang-switch {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 20px;
-  padding: 4px;
-  font-size: 13px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-.lang-switch .lang-icon { padding: 4px 6px; font-size: 14px; }
-.lang-switch a{
-  padding: 6px 14px; border-radius: 16px;
-  text-decoration: none; color: #656d76; transition: all 0.2s;
-}
-.lang-switch .active {
-  background: #f0f2f5;
-  color: #fff;
-}
-.lang-switch a:hover {
-  color: #1f2328;
-  text-decoration: none;
-}
 </style>
 </head>
 <body>
@@ -120,7 +73,7 @@ footer a{color:var(--accent)}
 <!-- 架构 -->
 <section>
   <div class="container">
-    <h2>架构</h2>
+    <h2><span class="icon">&#9881;</span> 架构</h2>
     <div class="arch-diagram"><span class="highlight">客户端</span> (aria_lite.py / curl / 任意 HTTP 客户端)
   │
   ├─ <span class="green">GET /download/&lt;id&gt;?fmt=alac</span>
@@ -148,7 +101,7 @@ footer a{color:var(--accent)}
 <!-- API 参考 -->
 <section>
   <div class="container">
-    <h2>API 参考</h2>
+    <h2><span class="icon">&#128279;</span> API 参考</h2>
     <table>
       <tr><th>方法</th><th>端点</th><th>说明</th></tr>
       <tr><td><code>GET</code></td><td><code>/health</code></td><td>服务健康状态 + 各解密实例状态</td></tr>
@@ -167,7 +120,7 @@ footer a{color:var(--accent)}
 <!-- 模块 -->
 <section>
   <div class="container">
-    <h2>模块说明</h2>
+    <h2><span class="icon">&#128230;</span> 模块说明</h2>
     <div class="modules">
       <div class="mod-card">
         <div class="name">server.py</div>
@@ -212,7 +165,7 @@ footer a{color:var(--accent)}
 <!-- 快速开始 -->
 <section>
   <div class="container">
-    <h2>快速开始</h2>
+    <h2><span class="icon">&#9889;</span> 快速开始</h2>
 <pre><code># 1. 安装依赖
 pip install -r requirements.txt   # flask, httpx, m3u8, pywidevine, mutagen
 
@@ -242,7 +195,7 @@ curl -H "Authorization: Bearer $API_TOKEN" \
 <!-- ALAC 流水线深入解析 -->
 <section>
   <div class="container">
-    <h2>ALAC 解密流水线深入解析</h2>
+    <h2><span class="icon">&#128269;</span> ALAC 解密流水线深入解析</h2>
     <p style="color:var(--dim);margin-bottom:20px">一首 ALAC 歌曲从 Apple CDN 到可播放 .m4a 文件的完整旅程：</p>
 
     <div class="step">
@@ -274,7 +227,7 @@ curl -H "Authorization: Bearer $API_TOKEN" \
       <div class="step-content">
         <strong>修补容器格式（m4a_writer）</strong>
         <p>关键步骤。三个转换将加密的 fragmented MP4 变为有效的 ALAC 文件：</p>
-        <p>a) 重命名 stsd 中<strong>所有</strong> <code>enca</code> sample entry 为 <code>alac</code>（不只是第一个——这是原始 bug）</p>
+        <p>a) 重命名 stsd 中<strong>所有</strong> <code>enca</code> sample entry 为 <code>alac</code></p>
         <p>b) 移除每个 entry 中的 <code>sinf</code> 盒（DRM 元数据）</p>
         <p>c) 将每个 <code>traf</code> 中的 <code>senc</code>/<code>saiz</code>/<code>saio</code> 盒覆写为 <code>free</code>（清除加密标志）</p>
       </div>
@@ -293,7 +246,7 @@ curl -H "Authorization: Bearer $API_TOKEN" \
 <!-- 配置参考 -->
 <section>
   <div class="container">
-    <h2>配置参考</h2>
+    <h2><span class="icon">&#9881;</span> 配置参考</h2>
     <table>
       <tr><th>环境变量</th><th>默认值</th><th>说明</th></tr>
       <tr><td><code>API_TOKEN</code></td><td class="config-val">（必填）</td><td>API 认证 Bearer token</td></tr>
