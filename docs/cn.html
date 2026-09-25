@@ -5,7 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>aria — Apple Music 无损音频服务</title>
 <style>
-:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#bc8cff;--red:#f85149;--orange:#d29922}
+:root {
+  --bg: #ffffff;
+  --bg-card: #f6f8fa;
+  --bg-code: #f0f2f5;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --text-dim: #656d76;
+  --text-bright: #1f2328;
+  --accent: #0969da;
+  --green: #1a7f37;
+  --yellow: #9a6700;
+  --red: #cf222e;
+  --purple: #8250df;
+  --orange: #bc4c00;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;line-height:1.7}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
@@ -32,7 +48,7 @@ table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.92em}
 th,td{padding:10px 14px;text-align:left;border:1px solid var(--border)}
 th{background:var(--surface);color:var(--accent);font-weight:600}
 td{color:var(--text)}
-tr:nth-child(even) td{background:rgba(22,27,34,0.5)}
+tr:nth-child(even) td{background:#f6f8fa}
 code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.9em;font-family:'SF Mono',Consolas,monospace;color:var(--orange)}
 pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85em;line-height:1.6;margin:12px 0}
 pre code{background:none;padding:0}
@@ -58,21 +74,27 @@ footer a{color:var(--accent)}
   display: flex;
   align-items: center;
   gap: 2px;
-  background: rgba(30, 35, 45, 0.95);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(100, 120, 150, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 20px;
   padding: 4px;
   font-size: 13px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 .lang-switch .lang-icon { padding: 4px 6px; font-size: 14px; }
 .lang-switch a, .lang-switch span:not(.lang-icon) {
   padding: 6px 14px; border-radius: 16px;
   text-decoration: none; color: #8b949e; transition: all 0.2s;
 }
-.lang-switch .active { background: #238636; color: #fff; }
-.lang-switch a:hover { color: #fff; text-decoration: none; }
+.lang-switch .active {
+  background: #0969da;
+  color: #fff;
+}
+.lang-switch a:hover {
+  color: #1f2328;
+  text-decoration: none;
+}
 </style>
 </head>
 <body>
