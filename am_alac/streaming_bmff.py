@@ -310,6 +310,28 @@ def stream_download_decrypt(
     _patch_stsd_inplace(out_path, ParsedSong(
         raw=b"", alac=alac, samples=[], total_data_size=total_bytes))
 
+    # Neutralize senc/saiz/saio encryption metadata in every traf
+    with open(out_path, "r+b") as _f:
+        _raw = bytearray(_f.read())
+        _changed = False
+        for _tag in [b"senc", b"saiz", b"saio"]:
+            _pos = 0
+            while True:
+                _idx = _raw.find(_tag, _pos)
+                if _idx < 0:
+                    break
+                if _idx >= 4:
+                    import struct as _st
+                    _sz = _st.unpack(">I", _raw[_idx - 4:_idx])[0]
+                    if 8 < _sz < 100000:
+                        _raw[_idx:_idx + 4] = b"free"
+                        _changed = True
+                _pos = _idx + 4
+        if _changed:
+            _f.seek(0)
+            _f.write(_raw)
+            _f.truncate()
+
     return StreamingResult(
         out_path=out_path,
         samples_count=sample_count,

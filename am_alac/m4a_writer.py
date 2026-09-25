@@ -262,7 +262,7 @@ def _patch_stsd_inplace(path: str, song: ParsedSong) -> None:
 
     entry_cursor = stsd_box.payload_offset + 4 + 4
     end_of_stsd = stsd_box.end_offset
-    sinf_size_removed = 0
+    total_sinf_removed = 0
 
     while entry_cursor < end_of_stsd:
         (entry_size,) = unpack_from(">I", moov_raw, entry_cursor)
@@ -280,17 +280,20 @@ def _patch_stsd_inplace(path: str, song: ParsedSong) -> None:
                 sinf_loc = child
                 break
 
+        this_removed = 0
         if sinf_loc is not None:
-            del moov_raw[sinf_loc.offset: sinf_loc.offset + sinf_loc.size]
-            sinf_size_removed = sinf_loc.size
-            _set_box_size(moov_raw, entry_cursor, entry_size - sinf_size_removed)
+            this_removed = sinf_loc.size
+            del moov_raw[sinf_loc.offset: sinf_loc.offset + this_removed]
+            _set_box_size(moov_raw, entry_cursor, entry_size - this_removed)
+            total_sinf_removed += this_removed
+            end_of_stsd -= this_removed
 
         moov_raw[entry_cursor + 4: entry_cursor + 8] = b"alac"
-        break
+        entry_cursor += entry_size - this_removed
 
-    if sinf_size_removed:
+    if total_sinf_removed:
         for parent in ancestors:
-            _set_box_size(moov_raw, parent.offset, parent.size - sinf_size_removed)
+            _set_box_size(moov_raw, parent.offset, parent.size - total_sinf_removed)
 
     # Step 4: Write patched moov back
     # If sinf was removed, moov shrank → need to shift all data after it.
