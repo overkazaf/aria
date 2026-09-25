@@ -6,11 +6,10 @@ Manages N sidecar instances for parallel ALAC decryption.
 Each instance runs on its own port pair (decrypt + m3u8).
 
 Architecture:
-  1. One-time: sudo bind-mount /dev, /proc, /sys into rootfs
-  2. Spawn N sidecar processes, each on ports base+i / base+10+i
-  3. Per-instance health check + auto-restart with exponential backoff
-  4. SIGUSR1 graceful restart of all instances
-  5. SIGTERM/SIGINT clean shutdown + unmount
+  1. Spawn N sidecar processes with user namespace isolation (no root needed)
+  2. Per-instance health check + auto-restart with exponential backoff
+  3. SIGUSR1 graceful restart of all instances
+  4. SIGTERM/SIGINT clean shutdown
 
 Usage:
     python3 aria_sidecar.py -F                       # 4 instances (default)
@@ -40,17 +39,16 @@ from pathlib import Path
 
 # ─── Defaults ─────────────────────────────────────────────
 
-DECRYPTOR_DIR    = Path("/mnt/data/codes/playground/am_alac_decryptor")
-DEFAULT_WRAPPER  = str(DECRYPTOR_DIR / "sidecar")
-DEFAULT_ROOTFS   = str(DECRYPTOR_DIR / "rootfs")
+DECRYPTOR_DIR        = Path("/mnt/data/codes/playground/am_alac_decryptor")
+DEFAULT_SIDECAR      = str(DECRYPTOR_DIR / "sidecar")
+DEFAULT_ROOTFS       = str(DECRYPTOR_DIR / "rootfs")
 DEFAULT_BASE_PORT    = 47010
 DEFAULT_M3U8_OFFSET  = 10      # m3u8 port = base + offset + instance
 DEFAULT_INSTANCES    = 4
 DEFAULT_GRACE_SECS   = 10
 DEFAULT_WAIT_TIMEOUT = 90
 MAX_RESTARTS         = 20
-HEALTH_INTERVAL      = 30
-SUDO_PASSWORD        = os.environ.get("SUDO_PASSWORD", "")
+HEALTH_INTERVAL      = 5
 
 # ─── Logging ──────────────────────────────────────────────
 
@@ -86,66 +84,21 @@ def probe_port(port: int, timeout: float = 1.0) -> bool:
         return False
 
 
-def sudo_run(cmd: list[str], check: bool = False, timeout: int = 10):
-    return subprocess.run(
-        ["sudo", "-S"] + cmd,
-        input=SUDO_PASSWORD + "\n", capture_output=True, text=True, timeout=timeout,
-    )
-
-
-# ─── Mount Setup ─────────────────────────────────────────
-
-def setup_rootfs(rootfs: str):
-    r = Path(rootfs)
-    for name in ["dev", "proc", "sys"]:
-        mp = r / name
-        mp.mkdir(exist_ok=True)
-        chk = subprocess.run(["mountpoint", "-q", str(mp)], capture_output=True)
-        if chk.returncode == 0:
-            log.debug("%s already mounted", mp)
-            continue
-        res = sudo_run(["mount", "--bind", f"/{name}", str(mp)])
-        if res.returncode == 0:
-            log.info("mounted /%s → %s", name, mp)
-        else:
-            log.warning("mount /%s failed: %s", name, res.stderr.strip()[:80])
-
-    urandom = r / "dev" / "urandom"
-    if urandom.is_symlink():
-        urandom.unlink()
-        log.info("removed stale /dev/urandom symlink")
-
-    etc = r / "etc"
-    etc.mkdir(exist_ok=True)
-    for name in ["resolv.conf", "hosts", "nsswitch.conf"]:
-        src = Path(f"/etc/{name}")
-        if src.exists():
-            try:
-                sudo_run(["cp", str(src), str(etc / name)])
-            except Exception:
-                pass
-
-    log.info("rootfs ready")
-
-
-def cleanup_rootfs(rootfs: str):
-    for name in ["sys", "proc", "dev"]:
-        sudo_run(["umount", "-l", str(Path(rootfs) / name)], check=False, timeout=5)
-
-
 # ─── Single Instance ─────────────────────────────────────
 
 class _Instance:
     """Manages one sidecar process."""
 
-    def __init__(self, idx: int, *, wrapper: str, decrypt_port: int,
-                 m3u8_port: int, login: str | None, code_from_file: bool,
+    def __init__(self, idx: int, *, sidecar_bin: str, rootfs: str,
+                 decrypt_port: int, m3u8_port: int,
+                 login: str | None, code_from_file: bool,
                  stub_mode: bool, grace_secs: int, wait_timeout: int,
                  cwd: str):
         self.idx = idx
         self.tag = f"inst-{idx}"
         self.log = _logger(self.tag)
-        self.wrapper = wrapper
+        self.sidecar_bin = sidecar_bin
+        self.rootfs = rootfs
         self.decrypt_port = decrypt_port
         self.m3u8_port = m3u8_port
         self.login = login
@@ -172,20 +125,24 @@ class _Instance:
         if self.stub_mode:
             return self._spawn_stub()
 
-        cmd = [self.wrapper, "--userns",
-               "--rootfs", str(DECRYPTOR_DIR / "rootfs"),
-               "--bin", "/system/bin/main",
-               "--wait-ports", f"{self.decrypt_port},{self.m3u8_port}",
-               "--wait-timeout", "60",
-               "--verbose",
-               "--"]
-        # child args (passed to /system/bin/main)
-        cmd.extend(["-H", "127.0.0.1",
-                    "-D", str(self.decrypt_port), "-M", str(self.m3u8_port)])
+        # sidecar CLI: sidecar [flags] -- [child args]
+        cmd = [
+            self.sidecar_bin, "--userns",
+            "--rootfs", self.rootfs,
+            "--bin", "/system/bin/main",
+            "--wait-ports", f"{self.decrypt_port},{self.m3u8_port}",
+            "--wait-timeout", "60",
+            "--verbose",
+            "--",
+            # child args (passed to /system/bin/main)
+            "-H", "127.0.0.1",
+            "-D", str(self.decrypt_port),
+            "-M", str(self.m3u8_port),
+        ]
         if self.code_from_file:
             cmd.append("-F")
         if self.login:
-            cmd.extend([f"--login={self.login}"])
+            cmd.append(f"--login={self.login}")
 
         self.log.info("gen=%d spawn %d/%d", self._gen, self.decrypt_port, self.m3u8_port)
 
@@ -296,9 +253,7 @@ class _Instance:
                     self.log.info("killing orphan pid=%d on :%d", pid, port)
                     try:
                         os.kill(pid, signal.SIGKILL)
-                    except PermissionError:
-                        sudo_run(["kill", "-9", str(pid)], check=False, timeout=3)
-                    except ProcessLookupError:
+                    except (PermissionError, ProcessLookupError):
                         pass
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
                 pass
@@ -350,13 +305,13 @@ class _Instance:
 # ─── Multi-Instance Manager ──────────────────────────────
 
 class AriaSidecar:
-    """Top-level manager: rootfs setup, N instances, signal handling."""
+    """Top-level manager: N instances, signal handling, lifecycle."""
 
-    def __init__(self, *, wrapper: str, rootfs: str,
+    def __init__(self, *, sidecar_bin: str, rootfs: str,
                  base_port: int, m3u8_offset: int, num_instances: int,
                  login: str | None, code_from_file: bool,
                  stub_mode: bool, grace_secs: int, wait_timeout: int):
-        self.wrapper = wrapper
+        self.sidecar_bin = sidecar_bin
         self.rootfs = rootfs
         self.num_instances = num_instances
         self.stub_mode = stub_mode
@@ -370,7 +325,8 @@ class AriaSidecar:
             dp = base_port + i
             mp = base_port + m3u8_offset + i
             inst = _Instance(
-                i, wrapper=wrapper, decrypt_port=dp, m3u8_port=mp,
+                i, sidecar_bin=sidecar_bin, rootfs=rootfs,
+                decrypt_port=dp, m3u8_port=mp,
                 login=login, code_from_file=code_from_file,
                 stub_mode=stub_mode, grace_secs=grace_secs,
                 wait_timeout=wait_timeout, cwd=cwd,
@@ -394,25 +350,26 @@ class AriaSidecar:
         signal.signal(signal.SIGUSR1, self._on_sig)
 
         log.info("aria_sidecar starting — %d instances", self.num_instances)
-        log.info("  wrapper: %s", self.wrapper)
+        log.info("  sidecar: %s", self.sidecar_bin)
         log.info("  rootfs:  %s", self.rootfs)
         for inst in self.instances:
             log.info("  %s: decrypt=%d m3u8=%d", inst.tag, inst.decrypt_port, inst.m3u8_port)
 
         if not self.stub_mode:
-            if not Path(self.wrapper).is_file():
-                log.error("wrapper not found: %s", self.wrapper)
+            if not Path(self.sidecar_bin).is_file():
+                log.error("sidecar binary not found: %s", self.sidecar_bin)
                 return
-            setup_rootfs(self.rootfs)
+
+        log.info("rootfs ready")
 
         # Start each instance in its own thread
         for inst in self.instances:
             t = threading.Thread(target=inst.run, daemon=True, name=inst.tag)
             t.start()
             self.threads.append(t)
-            time.sleep(1)  # stagger startups to avoid re-init conflicts
+            time.sleep(1)  # stagger startups
 
-        # Wait for all to be ready (with timeout)
+        # Wait for all to be ready
         deadline = time.time() + 120
         while time.time() < deadline and not self._stop.is_set():
             ready = sum(1 for inst in self.instances if inst.healthy)
@@ -425,7 +382,7 @@ class AriaSidecar:
             if ready < self.num_instances:
                 log.warning("only %d/%d instances ready", ready, self.num_instances)
 
-        # Supervise — just wait for stop signal
+        # Supervise
         while not self._stop.is_set():
             self._stop.wait(60)
             if self._stop.is_set(): break
@@ -441,27 +398,30 @@ class AriaSidecar:
         for t in self.threads:
             t.join(timeout=15)
 
-        if not self.stub_mode:
-            cleanup_rootfs(self.rootfs)
         log.info("aria_sidecar stopped")
 
 
 # ─── CLI ──────────────────────────────────────────────────
 
 def main():
-    p = argparse.ArgumentParser(description="aria_sidecar — multi-instance FairPlay decrypt manager")
+    p = argparse.ArgumentParser(
+        description="aria_sidecar — multi-instance FairPlay decrypt manager")
     p.add_argument("-n", "--instances", type=int, default=DEFAULT_INSTANCES,
-                   help=f"Number of wrapper instances (default: {DEFAULT_INSTANCES})")
+                   help=f"Number of sidecar instances (default: {DEFAULT_INSTANCES})")
     p.add_argument("--base-port", type=int, default=DEFAULT_BASE_PORT,
                    help=f"Base decrypt port (default: {DEFAULT_BASE_PORT})")
     p.add_argument("--m3u8-offset", type=int, default=DEFAULT_M3U8_OFFSET,
                    help=f"m3u8 port = base + offset + i (default: {DEFAULT_M3U8_OFFSET})")
-    p.add_argument("-L", "--login", default=None, help="Apple ID login (user:pass)")
+    p.add_argument("-L", "--login", default=None,
+                   help="Apple ID login (user:pass)")
     p.add_argument("-F", "--code-from-file", action="store_true", default=True,
                    help="Read auth from files (default)")
-    p.add_argument("--wrapper", default=DEFAULT_WRAPPER  = str(DECRYPTOR_DIR / "sidecar")
-    p.add_argument("--rootfs", default=DEFAULT_ROOTFS, help="Path to rootfs")
-    p.add_argument("--stub", action="store_true", help="Stub mode (no real decrypt)")
+    p.add_argument("--sidecar", default=DEFAULT_SIDECAR,
+                   help=f"Path to sidecar binary (default: {DEFAULT_SIDECAR})")
+    p.add_argument("--rootfs", default=DEFAULT_ROOTFS,
+                   help="Path to rootfs")
+    p.add_argument("--stub", action="store_true",
+                   help="Stub mode (no real decrypt)")
     p.add_argument("--grace-secs", type=int, default=DEFAULT_GRACE_SECS)
     p.add_argument("--wait-timeout", type=int, default=DEFAULT_WAIT_TIMEOUT)
     p.add_argument("-v", "--verbose", action="store_true")
@@ -470,7 +430,7 @@ def main():
     log.setLevel(logging.DEBUG if args.verbose else logging.INFO)
 
     svc = AriaSidecar(
-        wrapper=args.wrapper, rootfs=args.rootfs,
+        sidecar_bin=args.sidecar, rootfs=args.rootfs,
         base_port=args.base_port, m3u8_offset=args.m3u8_offset,
         num_instances=args.instances,
         login=args.login, code_from_file=args.code_from_file,

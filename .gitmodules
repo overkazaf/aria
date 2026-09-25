@@ -1,0 +1,3 @@
+[submodule "sidecar_src"]
+	path = sidecar_src
+	url = git@github.com:overkazaf/sidecar.git
