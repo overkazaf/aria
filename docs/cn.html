@@ -3,225 +3,524 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>aria — ALAC 流水线技术深度解析</title>
+<title>aria — Apple Music Lossless Audio Service</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-:root{--bg:#fff;--bg-card:#f6f8fa;--bg-code:#f0f2f5;--border:#d0d7de;--text:#1f2328;--text-dim:#656d76;--accent:#0969da;--green:#1a7f37;--yellow:#9a6700;--red:#cf222e;--purple:#8250df;--orange:#bc4c00;--font-mono:'SF Mono','Fira Code',Consolas,monospace;--font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+:root {
+  --bg:#ffffff;--bg-alt:#f6f8fa;--bg-code:#f0f2f5;
+  --text:#1f2328;--text-sec:#656d76;--text-dim:#8b949e;
+  --border:#d0d7de;--accent:#0969da;--accent-bg:#ddf4ff;
+  --green:#1a7f37;--green-bg:#dafbe1;--red:#cf222e;--red-bg:#ffebe9;
+  --purple:#8250df;--purple-bg:#fbefff;--amber:#9a6700;--amber-bg:#fff8c5;
+  --cyan:#0550ae;--cyan-bg:#ddf4ff;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1117;--bg-alt:#161b22;--bg-code:#161b22;
+  --text:#e6edf3;--text-sec:#8b949e;--text-dim:#484f58;
+  --border:#30363d;--accent:#58a6ff;--accent-bg:#1c3049;
+  --green:#3fb950;--green-bg:#0d2818;--red:#f85149;--red-bg:#3d1214;
+  --purple:#bc8cff;--purple-bg:#2a1740;--amber:#d29922;--amber-bg:#2e1c00;
+  --cyan:#58a6ff;--cyan-bg:#1c3049;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--bg-alt:#161b22;--bg-code:#161b22;
+  --text:#e6edf3;--text-sec:#8b949e;--text-dim:#484f58;
+  --border:#30363d;--accent:#58a6ff;--accent-bg:#1c3049;
+  --green:#3fb950;--green-bg:#0d2818;--red:#f85149;--red-bg:#3d1214;
+  --purple:#bc8cff;--purple-bg:#2a1740;--amber:#d29922;--amber-bg:#2e1c00;
+  --cyan:#58a6ff;--cyan-bg:#1c3049;
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:var(--font-sans);line-height:1.7}
-a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-.container{max-width:880px;margin:0 auto;padding:0 24px}
-.lang-switch{position:fixed;top:16px;right:16px;z-index:1000;display:flex;align-items:center;gap:2px;background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,0.12);border-radius:20px;padding:4px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
-.lang-switch a,.lang-switch span{padding:6px 14px;border-radius:16px;text-decoration:none;color:#656d76;transition:all 0.2s}
+body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,sans-serif;line-height:1.65}
+.page{max-width:860px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:2rem;font-weight:700;text-wrap:balance;margin-bottom:8px}
+h2{font-size:1.3rem;font-weight:700;margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+h3{font-size:1.05rem;font-weight:600;margin:28px 0 12px}
+p{color:var(--text-sec);margin-bottom:14px;font-size:.93rem}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{padding-left:22px;margin-bottom:16px}
+li{color:var(--text-sec);font-size:.93rem;margin-bottom:6px}
+code{font-family:'JetBrains Mono',monospace;font-size:.84em;background:var(--bg-code);padding:2px 6px;border-radius:3px}
+pre{background:var(--bg-code);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;margin:14px 0 18px;font-size:.82rem;line-height:1.55}
+pre code{background:none;padding:0}
+table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:.88rem}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border)}
+th{font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim)}
+.hero{text-align:center;padding:32px 0 40px}
+.hero p{font-size:1.05rem;color:var(--text-sec);max-width:600px;margin:0 auto 20px}
+.badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.badge{padding:5px 14px;border-radius:20px;font-size:.82rem;font-weight:600;border:1px solid var(--border);background:var(--bg-alt);color:var(--text-sec)}
+.toc{background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin:24px 0 40px}
+.toc h3{margin:0 0 10px;font-size:.9rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em}
+.toc ol{columns:2;column-gap:24px}
+.toc li{font-size:.88rem;margin-bottom:4px}
+.card{background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;padding:20px;margin:14px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0}
+.step{display:flex;gap:14px;margin:12px 0}
+.step-num{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem}
+.step-body{flex:1}
+.step-body strong{display:block;color:var(--text);margin-bottom:2px}
+.step-body p{margin:0;font-size:.88rem}
+.terminal{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:16px 0;background:var(--bg-code)}
+.terminal-header{display:flex;align-items:center;gap:6px;padding:10px 14px;background:var(--bg-alt);border-bottom:1px solid var(--border)}
+.terminal-header .dot{width:10px;height:10px;border-radius:50%}
+.terminal-header .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+.terminal-header .title{margin-left:8px;font-size:.78rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+.terminal-body{padding:14px 16px}
+.terminal-body pre{background:none;border:none;padding:0;margin:0;font-size:.8rem;color:var(--text);line-height:1.5}
+.diagram{margin:20px 0;text-align:center}
+.diagram svg{max-width:100%;height:auto}
+.compare-table td:first-child{font-weight:600;white-space:nowrap}
+.tag{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:3px;font-family:'JetBrains Mono',monospace}
+.tag-green{background:var(--green-bg);color:var(--green)}
+.tag-red{background:var(--red-bg);color:var(--red)}
+.tag-purple{background:var(--purple-bg);color:var(--purple)}
+.bar-chart{display:flex;align-items:flex-end;gap:24px;justify-content:center;margin:20px 0;height:180px}
+.bar-group{display:flex;flex-direction:column;align-items:center;gap:6px}
+.bar{width:48px;border-radius:4px 4px 0 0;transition:height .3s}
+.bar-label{font-size:.72rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+.bar-value{font-size:.78rem;font-weight:600;font-family:'JetBrains Mono',monospace}
+.lang-switch{position:fixed;top:16px;right:16px;z-index:1000;display:flex;background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,0.12);border-radius:20px;padding:4px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.lang-switch a,.lang-switch span{padding:6px 14px;border-radius:16px;text-decoration:none;color:#656d76;transition:all .2s}
 .lang-switch .active{background:#0969da;color:#fff}
 .lang-switch a:hover{color:#1f2328;text-decoration:none}
-nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
-nav .brand{font-weight:700;font-size:1.1rem}nav .brand span{color:var(--accent)}
-nav .links{display:flex;gap:16px;font-size:0.85rem}nav .links a{color:var(--text-dim)}
-.hero{text-align:center;padding:60px 0 40px;border-bottom:1px solid var(--border)}
-.hero h1{font-size:2.8rem;font-weight:800}.hero h1 span{color:var(--accent)}
-.hero .tagline{font-size:1.1rem;color:var(--text-dim);margin-top:12px;max-width:680px;margin:12px auto 0}
-.hero .badges span{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.85em;margin:4px;background:#f0f2f5;border:1px solid #d0d7de;color:#1f2328}
-.toc{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px 28px;margin:32px 0}
-.toc h3{margin-bottom:12px;font-size:1rem}.toc ol{padding-left:20px;columns:2;column-gap:40px}
-.toc li{margin-bottom:6px;font-size:0.9rem;break-inside:avoid}.toc li a{color:var(--text-dim)}
-section{padding:16px 32px 0;border-bottom:1px solid var(--border)}section:last-child{border-bottom:none}
-h2{font-size:1.5rem;font-weight:700;margin-bottom:16px;padding-top:8px}
-h3{font-size:1.05rem;color:var(--accent);margin:24px 0 10px;font-weight:600}
-h4{font-size:0.95rem;color:var(--purple);margin:16px 0 8px;font-weight:600}
-p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:24px}li{margin-bottom:6px}
-pre{background:var(--bg-code);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--font-mono);font-size:0.82rem;line-height:1.5;margin:14px 0;color:var(--text)}
-code{font-family:var(--font-mono);font-size:0.84em;background:var(--bg-code);padding:2px 6px;border-radius:4px}pre code{background:none;padding:0}
-details{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin:14px 0}
-details summary{padding:12px 18px;cursor:pointer;font-weight:600;font-size:0.95rem}
-details .inner{padding:0 18px 18px}
-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.88rem}
-th{background:var(--bg-card);text-align:left;padding:10px 14px;border:1px solid var(--border);font-weight:600}
-td{padding:10px 14px;border:1px solid var(--border);vertical-align:top}
-tr:nth-child(even){background:#f6f8fa}
-.diagram{background:var(--bg-code);border:1px solid var(--border);border-radius:8px;padding:16px;margin:16px 0;overflow-x:auto}
-.note{background:rgba(9,105,218,0.06);border-left:3px solid var(--accent);padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0;font-size:0.9rem}
-.step{display:flex;gap:16px;margin:20px 0;padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px}
-.step-num{width:32px;height:32px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
-.step-content{flex:1}.step-content h4{margin-top:0;color:var(--text);font-size:1rem}
-.bug-box{background:rgba(207,34,46,0.04);border:1px solid rgba(207,34,46,0.2);border-radius:8px;padding:14px;margin:14px 0}
-.bug-box h4{color:var(--red);margin-top:0}
-.fix-box{background:rgba(26,127,55,0.04);border:1px solid rgba(26,127,55,0.2);border-radius:8px;padding:14px;margin:14px 0}
-.fix-box h4{color:var(--green);margin-top:0}
-footer{padding:32px 0;text-align:center;color:var(--text-dim);font-size:0.85rem}
-@media(max-width:640px){.hero h1{font-size:2rem}.toc ol{columns:1}.step{flex-direction:column}}
+.section-num{color:var(--text-dim);font-weight:400;margin-right:4px}
+.note{background:var(--accent-bg);border-left:3px solid var(--accent);padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}
+.note p{margin:0;font-size:.88rem;color:var(--text)}
+footer{text-align:center;margin-top:60px;padding-top:20px;border-top:1px solid var(--border);font-size:.8rem;color:var(--text-dim)}
+@media(max-width:600px){.toc ol{columns:1}.grid{grid-template-columns:1fr}.bar-chart{gap:12px}}
 </style>
 </head>
 <body>
-<nav><div class="brand"><span>aria</span></div><div class="links"><a href="https://github.com/overkazaf/aria">GitHub</a><a href="https://overkazaf.github.io/sidecar/cn.html">sidecar</a></div></nav>
-<div class="lang-switch"><a href="index.html">EN</a><span class="active">中文</span></div>
-<div class="container">
-<div class="hero">
-<h1><span>aria</span></h1>
-<p class="tagline">Apple Music 无损音频服务 — 提供 AAC 和 Hi-Res ALAC（24-bit / 48 kHz）下载的 HTTP API 与流水线</p>
-<div class="badges"><span>ALAC 24-bit</span><span>AAC 256k</span><span>REST API</span><span>48/96/192 kHz</span></div>
+
+<div class="lang-switch">
+  <span >EN</span>
+  <a class="active">中文</a>
 </div>
-<div class="toc"><h3>目录</h3><ol>
-<li><a href="#pipeline">ALAC 流水线（六阶段）</a></li>
-<li><a href="#architecture">系统架构</a></li>
-<li><a href="#multi-instance">多实例架构</a></li>
-<li><a href="#api">API 参考</a></li>
-<li><a href="#modules">模块</a></li>
-<li><a href="#config">配置</a></li>
-<li><a href="#perf">性能</a></li>
-</ol></div>
 
-<section id="pipeline">
-<h2>1. ALAC 流水线</h2>
-<p>Apple Music 通过 HLS 交付无损音频，封装在分片 MP4 容器内。aria 的流水线有六个阶段。</p>
+<div class="page">
 
-<div class="step"><div class="step-num">1</div><div class="step-content">
-<h4>元数据与 HLS 解析</h4>
-<p>通过 Apple 的 <code>amp-api.music.apple.com</code> 将 adamId 解析为流媒体元数据。<strong>storefront</strong> 参数控制区域可用性 — disc 2 的曲目可能在 <code>us</code> 存在但 <code>cn</code> 不存在。</p>
-</div></div>
+<!-- Hero -->
+<div class="hero">
+  <h1>aria</h1>
+  <p>Apple Music Lossless Audio Service — an HTTP API and pipeline for downloading Apple Music tracks in AAC 256k and Hi-Res ALAC (24-bit / 48kHz+).</p>
+  <div class="badges">
+    <span class="badge">ALAC 24-bit</span>
+    <span class="badge">AAC 256k</span>
+    <span class="badge">REST API</span>
+    <span class="badge">48/96/192 kHz</span>
+  </div>
+</div>
 
-<div class="step"><div class="step-num">2</div><div class="step-content">
-<h4>变体选择</h4>
-<p><code>m3u8_select.py</code> 从 HLS 主播放列表选择最佳 ALAC 变体。</p>
-<table>
-<tr><th>编解码器</th><th>采样率</th><th>位深度</th><th>典型码率</th><th>~4 分钟</th></tr>
-<tr><td>AAC</td><td>44.1 kHz</td><td>--</td><td>256 kbps</td><td>~7.5 MB</td></tr>
-<tr><td>ALAC</td><td>48 kHz</td><td>24 位</td><td>~1,500 kbps</td><td>~45 MB</td></tr>
-<tr><td>ALAC</td><td>96 kHz</td><td>24 位</td><td>~3,000 kbps</td><td>~90 MB</td></tr>
-<tr><td>ALAC</td><td>192 kHz</td><td>24 位</td><td>~6,000 kbps</td><td>~180 MB</td></tr>
+<!-- Table of Contents -->
+<nav class="toc">
+  <h3>目录</h3>
+  <ol>
+    <li><a href="#what">What is aria?</a></li>
+    <li><a href="#formats">Audio Formats Explained</a></li>
+    <li><a href="#pipeline">How the Pipeline Works</a></li>
+    <li><a href="#architecture">系统架构</a></li>
+    <li><a href="#fmp4">Fragmented MP4 Internals</a></li>
+    <li><a href="#tcp">TCP Pipelined Protocol</a></li>
+    <li><a href="#usage">使用示例</a></li>
+    <li><a href="#api">API 参考</a></li>
+    <li><a href="#performance">性能</a></li>
+    <li><a href="#config">配置</a></li>
+  </ol>
+</nav>
+
+<!-- 1. What is aria -->
+<h2 id="what"><span class="section-num">1.</span> What is aria?</h2>
+<p>aria is a self-hosted service that downloads Apple Music tracks in lossless quality. Give it a song ID or album ID, and it returns a fully tagged .m4a file — with cover art, metadata, and bit-perfect audio.</p>
+<p>It supports two quality tiers:</p>
+<div class="grid">
+  <div class="card">
+    <h3>AAC 256k</h3>
+    <p>Lossy, compact. Uses Widevine CDM + mp4decrypt. ~5 MB per track. Good for casual listening.</p>
+  </div>
+  <div class="card">
+    <h3>ALAC 24-bit / 48kHz</h3>
+    <p>Lossless, Hi-Res. Uses FairPlay via <a href="https://github.com/overkazaf/sidecar">sidecar</a>. ~50 MB per track. Bit-for-bit identical to the studio master.</p>
+  </div>
+</div>
+
+<!-- 2. Audio Formats -->
+<h2 id="formats"><span class="section-num">2.</span> Audio Formats Explained</h2>
+<p>If you're new to lossless audio, here's what the terms mean:</p>
+
+<table class="compare-table">
+<tr><th>Format</th><th>Type</th><th>Bitrate</th><th>Quality</th><th>File Size (4 min)</th></tr>
+<tr><td>MP3 320k</td><td>Lossy</td><td>320 kbps</td><td>Good</td><td>~10 MB</td></tr>
+<tr><td>AAC 256k</td><td>Lossy</td><td>256 kbps</td><td>Very Good (better than MP3 at same rate)</td><td>~8 MB</td></tr>
+<tr><td>ALAC 16/44.1</td><td>Lossless</td><td>~900 kbps</td><td>CD Quality</td><td>~27 MB</td></tr>
+<tr><td>ALAC 24/48</td><td>Lossless</td><td>~2500 kbps</td><td>Hi-Res (studio master)</td><td>~50 MB</td></tr>
+<tr><td>ALAC 24/192</td><td>Lossless</td><td>~9200 kbps</td><td>Ultra Hi-Res</td><td>~180 MB</td></tr>
 </table>
-</div></div>
 
-<div class="step"><div class="step-num">3</div><div class="step-content">
-<h4>分片 MP4 解析</h4>
-<p>fMP4 将音频分成分片，每个分片有 <code>moof</code>/<code>mdat</code> 对。<code>stsd</code> 通常包含<strong>多个</strong> <code>enca</code> 条目。分片 1 引用索引 1，分片 2-16 引用索引 2。</p>
-<div class="diagram"><pre style="font-size:0.78em">moov
-  +-- stsd: enca[1] + enca[2]   (两个加密音频描述条目)
+<p><strong>ALAC</strong> (Apple Lossless Audio Codec) compresses audio without losing any data. When you decompress it, you get back the exact same samples the studio recorded. This is different from AAC/MP3, which permanently discard sounds your brain is less likely to notice (psychoacoustic masking).</p>
+<p><strong>Bit depth</strong> (16 vs 24) determines dynamic range — 24-bit can represent quieter details. <strong>Sample rate</strong> (44.1 vs 48 vs 192 kHz) determines the highest frequency that can be captured — 48kHz covers well beyond human hearing (20kHz).</p>
 
-moof (分片 1) -- desc_index=1
-  +-- trun: 175 采样 + senc/saiz/saio
-mdat: [采样字节 x 175]
+<!-- 3. Pipeline -->
+<h2 id="pipeline"><span class="section-num">3.</span> How the Pipeline Works</h2>
+<p>When you request a track, aria goes through 9 steps to deliver a playable file:</p>
 
-moof (分片 2) -- desc_index=2
-  +-- trun: 165 采样 + senc/saiz/saio
-mdat: [采样字节 x 165]
-... (共 16 个分片, 2650 采样, ~48 MB)</pre></div>
-</div></div>
+<div class="step"><div class="step-num">1</div><div class="step-body"><strong>You provide a song ID</strong><p>e.g. <code>python aria_lite.py 1615585008 --fmt alac</code></p></div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body"><strong>aria asks Apple for metadata</strong><p>Calls the Apple Music catalog API to get the song's name, artist, album, artwork URL, and HLS playlist URL.</p></div></div>
+<div class="step"><div class="step-num">3</div><div class="step-body"><strong>Apple returns an HLS master playlist</strong><p>A .m3u8 file listing all available quality variants (AAC, ALAC at various sample rates).</p></div></div>
+<div class="step"><div class="step-num">4</div><div class="step-body"><strong>aria picks the best variant</strong><p><code>m3u8_select.py</code> chooses the highest-quality ALAC stream (24-bit, up to 192kHz).</p></div></div>
+<div class="step"><div class="step-num">5</div><div class="step-body"><strong>aria downloads the encrypted audio</strong><p>The stream is a fragmented MP4 file (50+ MB) containing encrypted ALAC samples. Downloaded from Apple's CDN.</p></div></div>
+<div class="step"><div class="step-num">6</div><div class="step-body"><strong>sidecar decrypts each sample</strong><p>Samples are sent over TCP to the <a href="https://github.com/overkazaf/sidecar">sidecar</a> service, which decrypts them one by one using FairPlay. Pipelined for speed (15 MB/s).</p></div></div>
+<div class="step"><div class="step-num">7</div><div class="step-body"><strong>aria repairs the container</strong><p><code>m4a_writer.py</code> patches the MP4: renames <code>enca</code> (encrypted) to <code>alac</code> in all sample descriptions, and neutralizes encryption metadata boxes.</p></div></div>
+<div class="step"><div class="step-num">8</div><div class="step-body"><strong>aria writes metadata</strong><p>Uses <code>mutagen</code> to embed title, artist, album, track number, cover art (1200x1200 JPEG) into the .m4a iTunes atoms.</p></div></div>
+<div class="step"><div class="step-num">9</div><div class="step-body"><strong>You get a playable .m4a file</strong><p>24-bit / 48kHz ALAC, fully tagged, ready for any player.</p></div></div>
 
-<div class="step"><div class="step-num">4</div><div class="step-content">
-<h4>逐采样处理</h4>
-<p>流水线双线程架构：Writer 线程发送采样，Reader 线程接收结果，信号量（64）门控防止 TCP 缓冲区溢出。</p>
-<p>吞吐量：回环 ~12 MB/s，48 MB 歌曲约 4 秒。</p>
-</div></div>
+<!-- 4. System Architecture -->
+<h2 id="architecture"><span class="section-num">4.</span> System Architecture</h2>
 
-<div class="step"><div class="step-num">5</div><div class="step-content">
-<h4>M4A 容器修复</h4>
-<div class="bug-box"><h4>问题：只有第一个分片能播放（14.9s / 226s）</h4>
-<p>根因 1: stsd 有两个 enca 条目，代码只改了第一个就 break。根因 2: traf 中的 senc/saiz/saio 告诉解复用器采样仍加密。</p></div>
-<div class="fix-box"><h4>修复</h4>
-<p>A) 遍历所有 enca 条目重命名为 alac + 移除 sinf。B) 将每个 traf 的 senc/saiz/saio 覆写为 free Box。</p></div>
-</div></div>
+<div class="diagram">
+<svg viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+  <!-- Background -->
+  <rect width="800" height="520" fill="var(--bg-alt)" rx="12"/>
 
-<div class="step"><div class="step-num">6</div><div class="step-content">
-<h4>元数据标签</h4>
-<p>使用 mutagen 嵌入 iTunes atoms：标题、艺术家、专辑、封面（1200x1200 JPEG）、曲目号、ISRC。</p>
-</div></div>
-</section>
+  <!-- Client -->
+  <rect x="20" y="20" width="160" height="50" rx="8" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="100" y="42" fill="var(--accent)" font-size="12" font-weight="600" text-anchor="middle">aria_lite.py</text>
+  <text x="100" y="58" fill="var(--text-dim)" font-size="9" text-anchor="middle">client CLI</text>
 
-<section id="architecture">
-<h2>2. 系统架构</h2>
-<div class="diagram"><pre style="font-size:0.78em">aria_lite.py (客户端)                    aria server (Flask :8899)
-─────────────────────                    ──────────────────────────
-      |                                         |
-      |  GET /download/&lt;id&gt;?fmt=alac           |
-      +---------------------------------------->|
-      |                                +--------+
-      |                                | apple_api    - 目录 API
-      |                                | m3u8_select  - 选择 ALAC
-      |                                | m4s_parser   - 提取采样
-      |                                |              |
-      |                                | DecryptPool (轮询)
-      |                                | +------------+
-      |                                | | sidecar :47010/:47020
-      |                                | | sidecar :47011/:47021
-      |                                | +------------+
-      |                                | m4a_writer   - 容器修复
-      |                                | mutagen      - 元数据标签
-      |                                +--------+
-      |&lt;----------------------------------------+
-      |  200 OK (audio/mp4, ~48 MB)             |</pre></div>
-</section>
+  <!-- Arrow down -->
+  <line x1="100" y1="70" x2="100" y2="100" stroke="var(--text-dim)" stroke-width="1.5" marker-end="url(#arr)"/>
+  <defs><marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="var(--text-dim)"/></marker></defs>
 
-<section id="multi-instance">
-<h2>3. 多实例架构</h2>
-<h3>DecryptPool：轮询 + 逐实例互斥锁</h3>
-<p>每个 sidecar 实例独立运行在不同端口对上。DecryptPool 通过轮询分发，互斥锁确保每个实例同时只处理一首歌。</p>
-<pre><code>ARIA_INSTANCES=4 python3 server.py --port 8899
-# 实例 0: 47010/47020  |  实例 1: 47011/47021
-# 实例 2: 47012/47022  |  实例 3: 47013/47023</code></pre>
-<h4>为什么不用持久连接？</h4>
-<p>复用 TCP 连接跨歌曲会导致会话状态损坏。修复：每首歌新建连接。开销 ~1ms vs 4s 处理。19 首专辑零失败。</p>
-</section>
+  <!-- Server boundary -->
+  <rect x="20" y="100" width="760" height="380" rx="10" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="36" y="120" fill="var(--amber)" font-size="10" font-weight="600">aria server (Flask :8899)</text>
 
-<section id="api">
-<h2>4. API 参考</h2>
+  <!-- Row 1: API + m3u8 + streaming -->
+  <rect x="40" y="135" width="140" height="45" rx="6" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="110" y="155" fill="var(--green)" font-size="10" font-weight="600" text-anchor="middle">apple_api.py</text>
+  <text x="110" y="168" fill="var(--text-dim)" font-size="8" text-anchor="middle">catalog + auth</text>
+
+  <line x1="180" y1="157" x2="210" y2="157" stroke="var(--text-dim)" stroke-width="1" marker-end="url(#arr)"/>
+
+  <rect x="210" y="135" width="140" height="45" rx="6" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="280" y="155" fill="var(--green)" font-size="10" font-weight="600" text-anchor="middle">m3u8_select.py</text>
+  <text x="280" y="168" fill="var(--text-dim)" font-size="8" text-anchor="middle">variant picker</text>
+
+  <line x1="350" y1="157" x2="380" y2="157" stroke="var(--text-dim)" stroke-width="1" marker-end="url(#arr)"/>
+
+  <rect x="380" y="135" width="170" height="45" rx="6" fill="var(--cyan-bg)" stroke="var(--cyan)" stroke-width="1"/>
+  <text x="465" y="155" fill="var(--cyan)" font-size="10" font-weight="600" text-anchor="middle">streaming_bmff.py</text>
+  <text x="465" y="168" fill="var(--text-dim)" font-size="8" text-anchor="middle">zero-buffer parser (11 MB peak)</text>
+
+  <!-- External: Apple API -->
+  <rect x="600" y="135" width="160" height="45" rx="6" fill="var(--bg)" stroke="var(--border)" stroke-width="1"/>
+  <text x="680" y="155" fill="var(--text-sec)" font-size="10" font-weight="500" text-anchor="middle">Apple Music API</text>
+  <text x="680" y="168" fill="var(--text-dim)" font-size="8" text-anchor="middle">amp-api.music.apple.com</text>
+
+  <!-- Row 2: DecryptPool -->
+  <line x1="465" y1="180" x2="465" y2="210" stroke="var(--text-dim)" stroke-width="1" marker-end="url(#arr)"/>
+
+  <rect x="280" y="210" width="370" height="90" rx="8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="296" y="228" fill="var(--green)" font-size="9" font-weight="600">DecryptPool (round-robin, per-instance mutex)</text>
+
+  <rect x="300" y="240" width="100" height="35" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="350" y="257" fill="var(--green)" font-size="9" font-weight="500" text-anchor="middle">instance 0</text>
+  <text x="350" y="269" fill="var(--text-dim)" font-size="7" text-anchor="middle">:47010 / :47020</text>
+
+  <rect x="420" y="240" width="100" height="35" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="470" y="257" fill="var(--green)" font-size="9" font-weight="500" text-anchor="middle">instance 1</text>
+  <text x="470" y="269" fill="var(--text-dim)" font-size="7" text-anchor="middle">:47011 / :47021</text>
+
+  <text x="560" y="262" fill="var(--text-dim)" font-size="9">...</text>
+
+  <rect x="580" y="240" width="55" height="35" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="607" y="257" fill="var(--green)" font-size="9" font-weight="500" text-anchor="middle">N</text>
+  <text x="607" y="269" fill="var(--text-dim)" font-size="7" text-anchor="middle">:4701N</text>
+
+  <!-- Sidecar -->
+  <rect x="40" y="220" width="200" height="70" rx="8" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+  <text x="56" y="238" fill="var(--cyan)" font-size="9" font-weight="600">sidecar (user namespace)</text>
+  <rect x="55" y="248" width="80" height="24" rx="4" fill="var(--cyan-bg)" stroke="var(--cyan)" stroke-width="1"/>
+  <text x="95" y="264" fill="var(--cyan)" font-size="8" text-anchor="middle">:47010 dec</text>
+  <rect x="145" y="248" width="80" height="24" rx="4" fill="var(--cyan-bg)" stroke="var(--cyan)" stroke-width="1"/>
+  <text x="185" y="264" fill="var(--cyan)" font-size="8" text-anchor="middle">:47020 m3u8</text>
+
+  <!-- Arrows: pool <-> sidecar -->
+  <line x1="280" y1="255" x2="240" y2="255" stroke="var(--green)" stroke-width="1" marker-end="url(#arr)"/>
+  <text x="260" y="248" fill="var(--text-dim)" font-size="7" text-anchor="middle">samples</text>
+
+  <!-- Row 3: m4a writer -->
+  <line x1="465" y1="300" x2="465" y2="330" stroke="var(--text-dim)" stroke-width="1" marker-end="url(#arr)"/>
+
+  <rect x="330" y="330" width="270" height="50" rx="6" fill="var(--purple-bg)" stroke="var(--purple)" stroke-width="1"/>
+  <text x="465" y="352" fill="var(--purple)" font-size="11" font-weight="600" text-anchor="middle">m4a_writer.py</text>
+  <text x="465" y="367" fill="var(--text-dim)" font-size="8" text-anchor="middle">enca to alac + senc/saiz/saio to free</text>
+
+  <!-- Row 4: metadata -->
+  <line x1="465" y1="380" x2="465" y2="410" stroke="var(--text-dim)" stroke-width="1" marker-end="url(#arr)"/>
+
+  <rect x="370" y="410" width="190" height="45" rx="6" fill="var(--amber-bg)" stroke="var(--amber)" stroke-width="1"/>
+  <text x="465" y="430" fill="var(--amber)" font-size="10" font-weight="600" text-anchor="middle">mutagen</text>
+  <text x="465" y="443" fill="var(--text-dim)" font-size="8" text-anchor="middle">title, artist, album, cover art</text>
+
+  <!-- Output -->
+  <line x1="370" y1="435" x2="310" y2="460" stroke="var(--green)" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="200" y="450" width="120" height="35" rx="6" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1.5"/>
+  <text x="260" y="470" fill="var(--green)" font-size="10" font-weight="600" text-anchor="middle">Tagged .m4a</text>
+
+  <line x1="560" y1="435" x2="620" y2="460" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <rect x="610" y="450" width="100" height="35" rx="6" fill="var(--bg)" stroke="var(--border)" stroke-width="1" stroke-dasharray="4,3"/>
+</svg>
+</div>
+
+<!-- 5. fMP4 Internals -->
+<h2 id="fmp4"><span class="section-num">5.</span> Fragmented MP4 Internals</h2>
+<p>Apple Music delivers audio as fragmented MP4 (fMP4). Understanding its structure is key to the container repair step.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', monospace">
+  <rect width="760" height="340" fill="var(--bg-alt)" rx="10"/>
+
+  <!-- Title -->
+  <text x="380" y="24" fill="var(--text)" font-size="11" font-weight="600" text-anchor="middle" font-family="Inter">Before (encrypted) vs After (decrypted)</text>
+
+  <!-- BEFORE -->
+  <text x="190" y="50" fill="var(--red)" font-size="10" font-weight="600" text-anchor="middle">Before</text>
+
+  <rect x="20" y="60" width="340" height="30" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1"/>
+  <text x="190" y="80" fill="var(--accent)" font-size="9" text-anchor="middle">ftyp (file type)</text>
+
+  <rect x="20" y="95" width="340" height="50" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1"/>
+  <text x="190" y="115" fill="var(--accent)" font-size="9" text-anchor="middle">moov / trak / stsd</text>
+  <text x="80" y="133" fill="var(--red)" font-size="8">enca (encrypted)</text>
+  <text x="240" y="133" fill="var(--red)" font-size="8">enca (encrypted)</text>
+
+  <rect x="20" y="150" width="340" height="40" rx="4" fill="var(--red-bg)" stroke="var(--red)" stroke-width="1"/>
+  <text x="190" y="168" fill="var(--red)" font-size="9" text-anchor="middle">moof / traf</text>
+  <text x="100" y="182" fill="var(--red)" font-size="7">senc</text>
+  <text x="160" y="182" fill="var(--red)" font-size="7">saiz</text>
+  <text x="220" y="182" fill="var(--red)" font-size="7">saio</text>
+  <text x="290" y="182" fill="var(--text-dim)" font-size="7">trun</text>
+
+  <rect x="20" y="195" width="340" height="35" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="1"/>
+  <text x="190" y="216" fill="var(--text-sec)" font-size="9" text-anchor="middle">mdat (encrypted samples)</text>
+
+  <text x="190" y="245" fill="var(--text-dim)" font-size="8" text-anchor="middle">... more moof + mdat fragments ...</text>
+
+  <!-- AFTER -->
+  <text x="570" y="50" fill="var(--green)" font-size="10" font-weight="600" text-anchor="middle">After (patched)</text>
+
+  <rect x="400" y="60" width="340" height="30" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1"/>
+  <text x="570" y="80" fill="var(--accent)" font-size="9" text-anchor="middle">ftyp (unchanged)</text>
+
+  <rect x="400" y="95" width="340" height="50" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="570" y="115" fill="var(--green)" font-size="9" text-anchor="middle">moov / trak / stsd</text>
+  <text x="460" y="133" fill="var(--green)" font-size="8">alac (decoded)</text>
+  <text x="620" y="133" fill="var(--green)" font-size="8">alac (decoded)</text>
+
+  <rect x="400" y="150" width="340" height="40" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="570" y="168" fill="var(--green)" font-size="9" text-anchor="middle">moof / traf</text>
+  <text x="480" y="182" fill="var(--text-dim)" font-size="7">free</text>
+  <text x="540" y="182" fill="var(--text-dim)" font-size="7">free</text>
+  <text x="600" y="182" fill="var(--text-dim)" font-size="7">free</text>
+  <text x="670" y="182" fill="var(--text-dim)" font-size="7">trun</text>
+
+  <rect x="400" y="195" width="340" height="35" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="570" y="216" fill="var(--green)" font-size="9" text-anchor="middle">mdat (decrypted samples)</text>
+
+  <text x="570" y="245" fill="var(--text-dim)" font-size="8" text-anchor="middle">... patched fragments ...</text>
+
+  <!-- Legend -->
+  <rect x="20" y="265" width="720" height="60" rx="6" fill="var(--bg)"/>
+  <text x="40" y="285" fill="var(--text)" font-size="9" font-weight="600" font-family="Inter">Key fixes in m4a_writer.py:</text>
+  <text x="40" y="303" fill="var(--text-sec)" font-size="8" font-family="Inter">1. Rename ALL enca entries to alac (not just the first — the original bug)</text>
+  <text x="40" y="317" fill="var(--text-sec)" font-size="8" font-family="Inter">2. Replace senc/saiz/saio with free boxes (same size, preserves byte offsets)</text>
+</svg>
+</div>
+
+<!-- 6. TCP Protocol -->
+<h2 id="tcp"><span class="section-num">6.</span> TCP Pipelined Protocol</h2>
+<p>The decrypt step uses a pipelined TCP protocol. Instead of send-wait-recv per sample (serial), aria uses two threads that run simultaneously:</p>
+
+<div class="diagram">
+<svg viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+  <rect width="700" height="220" fill="var(--bg-alt)" rx="10"/>
+
+  <!-- Serial (slow) -->
+  <text x="175" y="24" fill="var(--red)" font-size="10" font-weight="600" text-anchor="middle">Serial (4.36s)</text>
+  <rect x="20" y="35" width="310" height="80" rx="6" fill="var(--bg)" stroke="var(--border)" stroke-width="1"/>
+  <text x="30" y="55" fill="var(--text-dim)" font-size="8">send s1 -> wait -> recv p1</text>
+  <text x="30" y="70" fill="var(--text-dim)" font-size="8">send s2 -> wait -> recv p2</text>
+  <text x="30" y="85" fill="var(--text-dim)" font-size="8">send s3 -> wait -> recv p3</text>
+  <text x="30" y="100" fill="var(--text-dim)" font-size="8">... (2650 round-trips, one at a time)</text>
+
+  <!-- Pipelined (fast) -->
+  <text x="525" y="24" fill="var(--green)" font-size="10" font-weight="600" text-anchor="middle">Pipelined (3.12s)</text>
+  <rect x="370" y="35" width="310" height="80" rx="6" fill="var(--bg)" stroke="var(--border)" stroke-width="1"/>
+  <text x="380" y="55" fill="var(--accent)" font-size="8">Writer: send s1, s2, s3, s4, s5...</text>
+  <text x="380" y="70" fill="var(--green)" font-size="8">Reader: recv p1, p2, p3, p4, p5...</text>
+  <text x="380" y="85" fill="var(--text-dim)" font-size="8">Semaphore gate: max 64 in-flight</text>
+  <text x="380" y="100" fill="var(--text-dim)" font-size="8">(both run simultaneously, full duplex)</text>
+
+  <!-- Performance bar -->
+  <rect x="20" y="130" width="310" height="24" rx="4" fill="var(--red-bg)" stroke="var(--red)" stroke-width="1"/>
+  <text x="175" y="146" fill="var(--red)" font-size="9" font-weight="600" text-anchor="middle">10.9 MB/s</text>
+
+  <rect x="370" y="130" width="310" height="24" rx="4" fill="var(--green-bg)" stroke="var(--green)" stroke-width="1"/>
+  <text x="525" y="146" fill="var(--green)" font-size="9" font-weight="600" text-anchor="middle">15.3 MB/s</text>
+
+  <!-- Note -->
+  <text x="350" y="178" fill="var(--text)" font-size="10" font-weight="600" text-anchor="middle">TCP_NODELAY is required</text>
+  <text x="350" y="195" fill="var(--text-sec)" font-size="8" text-anchor="middle">Without it, Nagle's algorithm delays small packets and the connection resets (timeout).</text>
+  <text x="350" y="210" fill="var(--text-sec)" font-size="8" text-anchor="middle">With TCP_NODELAY + pipelining: 57x faster than the original Go implementation (193s to 3.4s).</text>
+</svg>
+</div>
+
+<!-- 7. Usage -->
+<h2 id="usage"><span class="section-num">7.</span> Usage Examples</h2>
+
+<h3>Single track (AAC)</h3>
+<div class="terminal">
+  <div class="terminal-header"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">aria_lite.py</span></div>
+  <div class="terminal-body"><pre><code>$ python aria_lite.py 1615585008
+
+    ┌─────────────────────────────────────────────┐
+    │  aria_lite — Apple Music Audio Pipeline      │
+    └─────────────────────────────────────────────┘
+    remote  http://67.219.99.40  via proxy
+    aria    connected via LAN direct
+
+09:12:30 [    init] song_id=1615585008
+09:12:30 [     key] key=7c9cd95cb929... cached=True stream=yes
+09:12:31 [   fetch] ██████████████████████████████ 100% 5718/5718 KB
+09:12:31 [ decrypt] mp4decrypt done
+09:12:31 [  verify] valid audio — 167.4s
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Result
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1 downloaded
+  duration 2:47 · size 5.5 MB · elapsed 1.2s</code></pre></div>
+</div>
+
+<h3>Hi-Res ALAC</h3>
+<div class="terminal">
+  <div class="terminal-header"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">ALAC 24-bit/48kHz</span></div>
+  <div class="terminal-body"><pre><code>$ python aria_lite.py 1850496033 --fmt alac
+
+09:14:22 [    aria] downloading ALAC via aria service
+09:14:35 [    aria] 48861 KB downloaded
+09:14:35 [  verify] valid ALAC — 226.1s (2650 packets, 48000Hz, 24bit)
+09:14:36 [     tag] tagged: The Fate of Ophelia — Taylor Swift
+
+  1 downloaded · duration 3:46 · size 47.7 MB · elapsed 13.2s</code></pre></div>
+</div>
+
+<h3>Album download (parallel)</h3>
+<div class="terminal">
+  <div class="terminal-header"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">Album + concurrent workers</span></div>
+  <div class="terminal-body"><pre><code>$ python aria_lite.py --album 1850496031 --fmt alac -j 2
+
+09:20:10 [   album] The Life of a Showgirl — Taylor Swift — 19 tracks
+09:20:10 [   album] output: output/album.1850496031.Taylor Swift - .../
+
+09:20:22 [  verify] valid ALAC — 226.1s  The Fate of Ophelia
+09:20:38 [  verify] valid ALAC — 208.3s  Elizabeth Taylor
+09:20:55 [  verify] valid ALAC — 235.4s  Opalite
+...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  The Life of a Showgirl + Acoustic Collection
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  19 downloaded
+  duration 68:58 · size 849.7 MB · elapsed 347.9s</code></pre></div>
+</div>
+
+<h3>Track metadata</h3>
+<div class="terminal">
+  <div class="terminal-header"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="title">--info mode</span></div>
+  <div class="terminal-body"><pre><code>$ python aria_lite.py 1615585008 --info
+
+  As It Was
+  ──────────────────────────────────────────
+        artist  Harry Styles
+         album  Harry's House
+      duration  2:47
+            id  1615585008
+          isrc  USSM12200612
+         genre  Pop, Music
+       quality  atmos, lossless, lossy-stereo, spatial</code></pre></div>
+</div>
+
+<!-- 8. API -->
+<h2 id="api"><span class="section-num">8.</span> API Reference</h2>
+<p>All endpoints except <code>/</code> and <code>/health</code> require <code>Authorization: Bearer TOKEN</code>.</p>
+
 <table>
-<tr><th>方法</th><th>端点</th><th>说明</th></tr>
-<tr><td>GET</td><td><code>/health</code></td><td>服务健康 + 逐实例状态</td></tr>
-<tr><td>GET</td><td><code>/search?q=...&amp;type=songs</code></td><td>搜索目录</td></tr>
-<tr><td>GET</td><td><code>/song/&lt;id&gt;</code></td><td>歌曲元数据</td></tr>
-<tr><td>GET</td><td><code>/album/&lt;id&gt;</code></td><td>专辑 + 曲目列表</td></tr>
-<tr><td>GET</td><td><code>/download/&lt;id&gt;?fmt=alac</code></td><td>下载歌曲</td></tr>
-<tr><td>GET</td><td><code>/album/&lt;id&gt;/download</code></td><td>专辑 ZIP 下载</td></tr>
-<tr><td>POST</td><td><code>/batch</code></td><td>批量下载</td></tr>
+<tr><th>Method</th><th>Endpoint</th><th>说明</th></tr>
+<tr><td>GET</td><td><code>/health</code></td><td>Service health (no auth)</td></tr>
+<tr><td>GET</td><td><code>/search?q=term&amp;type=songs</code></td><td>Search songs, albums, artists</td></tr>
+<tr><td>GET</td><td><code>/song/&lt;id&gt;</code></td><td>Song metadata</td></tr>
+<tr><td>GET</td><td><code>/album/&lt;id&gt;</code></td><td>Album + track list</td></tr>
+<tr><td>GET</td><td><code>/artist/&lt;id&gt;</code></td><td>Artist + albums</td></tr>
+<tr><td>GET</td><td><code>/download/&lt;id&gt;?fmt=alac</code></td><td>Download (default AAC; <code>?fmt=alac</code> for Hi-Res)</td></tr>
+<tr><td>GET</td><td><code>/album/&lt;id&gt;/download</code></td><td>Download album as ZIP</td></tr>
+<tr><td>POST</td><td><code>/batch</code></td><td>Batch download: <code>{"ids":[...],"fmt":"alac"}</code></td></tr>
 </table>
-</section>
 
-<section id="modules">
-<h2>5. 模块</h2>
-<table>
-<tr><th>模块</th><th>行数</th><th>职责</th></tr>
-<tr><td><code>server.py</code></td><td>~500</td><td>HTTP API、DecryptPool、元数据标签</td></tr>
-<tr><td><code>apple_api.py</code></td><td>~290</td><td>Apple 目录客户端</td></tr>
-<tr><td><code>m3u8_select.py</code></td><td>~130</td><td>HLS 变体选择器</td></tr>
-<tr><td><code>streaming_bmff.py</code></td><td>~250</td><td>流式 BMFF 解析器（94% 内存优化）</td></tr>
-<tr><td><code>m4s_parser.py</code></td><td>~440</td><td>fMP4 解析器</td></tr>
-<tr><td><code>m4a_writer.py</code></td><td>~200</td><td>容器修复</td></tr>
-<tr><td><code>decryptor.py</code></td><td>~420</td><td>流水线编排、DecryptPool</td></tr>
-<tr><td><code>aria_rpc.py</code></td><td>~310</td><td>TCP 流水线客户端（57x 优化）</td></tr>
-<tr><td><code>aria_sidecar.py</code></td><td>~480</td><td>N 实例 sidecar 管理器</td></tr>
-</table>
-</section>
+<!-- 9. Performance -->
+<h2 id="performance"><span class="section-num">9.</span> Performance</h2>
 
-<section id="config">
-<h2>6. 配置</h2>
+<h3>Pipeline breakdown (47.7 MB ALAC track)</h3>
 <table>
-<tr><th>环境变量</th><th>默认值</th><th>说明</th></tr>
-<tr><td><code>API_TOKEN</code></td><td>必需</td><td>Bearer 令牌</td></tr>
-<tr><td><code>ARIA_INSTANCES</code></td><td>1</td><td>并行处理实例数</td></tr>
-<tr><td><code>STOREFRONT</code></td><td>us</td><td>目录区域</td></tr>
-<tr><td><code>CACHE_DIR</code></td><td>/tmp/am_cache</td><td>文件缓存</td></tr>
-<tr><td><code>ARIA_CONFIG</code></td><td>~/.config/aria/config.json</td><td>凭据配置</td></tr>
+<tr><th>Phase</th><th>Time</th><th>Share</th></tr>
+<tr><td>m3u8 resolve</td><td>0.44s</td><td>5%</td></tr>
+<tr><td>CDN download</td><td>1.80s</td><td>22%</td></tr>
+<tr><td>fMP4 parse</td><td>45ms</td><td>1%</td></tr>
+<tr><td>Decrypt (pipelined)</td><td>3.12s</td><td>38%</td></tr>
+<tr><td>m4a write</td><td>~100ms</td><td>1%</td></tr>
+<tr><td>Audio verify</td><td>~0.5s</td><td>6%</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>~8.3s</strong></td><td><strong>100%</strong></td></tr>
 </table>
-</section>
 
-<section id="perf">
-<h2>7. 性能</h2>
-<table>
-<tr><th>阶段</th><th>耗时</th><th>备注</th></tr>
-<tr><td>元数据 + HLS</td><td>~2s</td><td>Apple API 延迟</td></tr>
-<tr><td>流下载</td><td>~3s</td><td>CDN ~16 MB/s</td></tr>
-<tr><td>fMP4 解析</td><td>&lt;0.1s</td><td>CPU，内存中</td></tr>
-<tr><td>处理</td><td>~4s</td><td>回环 ~12 MB/s</td></tr>
-<tr><td>容器修复</td><td>&lt;0.1s</td><td>原地修补</td></tr>
-<tr><td>标签</td><td>~1s</td><td>+ 封面下载</td></tr>
-<tr><td><strong>总计</strong></td><td><strong>~10s</strong></td><td>单首端到端</td></tr>
+<h3>sidecar v4 vs wrapper vs wrapper-v2</h3>
+<table class="compare-table">
+<tr><th>指标</th><th>wrapper</th><th>wrapper-v2</th><th>sidecar v4</th></tr>
+<tr><td>Cold startup</td><td>2338 ms</td><td>~5000 ms (est.)</td><td><span class="tag tag-green">2163 ms</span></td></tr>
+<tr><td>Decrypt</td><td>15.0 MB/s</td><td>~15 MB/s</td><td><span class="tag tag-green">15.3 MB/s</span></td></tr>
+<tr><td>Memory</td><td>53.8 MB</td><td>~150 MB (est.)</td><td><span class="tag tag-green">52.3 MB</span></td></tr>
+<tr><td>Container</td><td>No</td><td>Docker</td><td><span class="tag tag-green">No</span></td></tr>
+<tr><td>Source</td><td>Closed</td><td>Rust (open)</td><td><span class="tag tag-green">C 935 lines</span></td></tr>
 </table>
-</section>
+
+<h3>Key optimizations</h3>
+<table>
+<tr><th>Optimization</th><th>Before</th><th>After</th><th>Impact</th></tr>
+<tr><td>TCP_NODELAY</td><td>Connection reset</td><td>4.36s</td><td>Required</td></tr>
+<tr><td>Pipelining</td><td>4.36s</td><td>3.12s</td><td>1.4x</td></tr>
+<tr><td>Streaming BMFF</td><td>179 MB peak</td><td>11 MB</td><td>94% memory</td></tr>
+<tr><td>Namespace reduction</td><td>USER+NS+PID</td><td>USER+PID</td><td>7.5% startup</td></tr>
+</table>
+
+<!-- 10. Config -->
+<h2 id="config"><span class="section-num">10.</span> Configuration</h2>
+
+<table>
+<tr><th>Environment Variable</th><th>Default</th><th>说明</th></tr>
+<tr><td><code>API_TOKEN</code></td><td>(required)</td><td>Auth token for protected endpoints</td></tr>
+<tr><td><code>ARIA_INSTANCES</code></td><td>1</td><td>Number of sidecar decrypt instances</td></tr>
+<tr><td><code>STOREFRONT</code></td><td>us</td><td>Apple Music region</td></tr>
+<tr><td><code>CACHE_DIR</code></td><td>/tmp/am_cache</td><td>Decrypted file cache</td></tr>
+<tr><td><code>ARIA_HOST</code></td><td>127.0.0.1</td><td>sidecar host</td></tr>
+<tr><td><code>ARIA_DECRYPT_PORT</code></td><td>47010</td><td>sidecar decrypt port</td></tr>
+<tr><td><code>ARIA_M3U8_PORT</code></td><td>47020</td><td>sidecar m3u8 port</td></tr>
+</table>
 
 <footer>
-<p>aria 基于 <a href="https://overkazaf.github.io/sidecar/cn.html">sidecar</a> 进行音频处理</p>
-<p><a href="https://github.com/overkazaf/aria">GitHub</a> · MIT 许可证</p>
+  aria — Apple Music Lossless Audio Service<br>
+  <a href="https://github.com/overkazaf/aria">GitHub</a> · <a href="https://github.com/overkazaf/sidecar">sidecar</a> · MIT License
 </footer>
+
 </div>
 </body>
 </html>
