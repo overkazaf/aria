@@ -81,7 +81,7 @@ th{font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em
 .bar{width:48px;border-radius:4px 4px 0 0;transition:height .3s}
 .bar-label{font-size:.72rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
 .bar-value{font-size:.78rem;font-weight:600;font-family:'JetBrains Mono',monospace}
-.lang-switch{position:fixed;top:16px;right:16px;z-index:1000;display:flex;background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,0.12);border-radius:20px;padding:4px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.top-nav { display: flex; justify-content: space-between; align-items: center; padding: 10px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(255,255,255,0.95); backdrop-filter: blur(8px); z-index: 100; font-size: 13px; } .top-nav a { color: var(--text-secondary); text-decoration: none; } .top-nav a:hover { color: var(--accent); } .lang-toggle { display: flex; gap: 2px; background: var(--bg-code); border-radius: 16px; padding: 3px; } .lang-toggle a, .lang-toggle span { padding: 4px 12px; border-radius: 12px; text-decoration: none; color: var(--text-secondary); } .lang-toggle .active { background: var(--accent); color: #fff; }
 .lang-switch a,.lang-switch span{padding:6px 14px;border-radius:16px;text-decoration:none;color:#656d76;transition:all .2s}
 .lang-switch .active{background:#0969da;color:#fff}
 .lang-switch a:hover{color:#1f2328;text-decoration:none}
@@ -93,11 +93,9 @@ footer{text-align:center;margin-top:60px;padding-top:20px;border-top:1px solid v
 </style>
 </head>
 <body>
+<nav class="top-nav"><a href="https://github.com/overkazaf/aria">overkazaf/aria</a><div class="lang-toggle"><a href="index.html">EN</a><span class="active">CN</span></div></nav>
 
-<div class="lang-switch">
-  <span >EN</span>
-  <a class="active">中文</a>
-</div>
+
 
 <div class="page">
 
