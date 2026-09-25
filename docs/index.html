@@ -5,284 +5,381 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>aria — Apple Music Lossless Audio Service</title>
 <style>
-:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#bc8cff;--red:#f85149;--orange:#d29922}
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#bc8cff;--red:#f85149;--orange:#d29922;--cyan:#39d2e2}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.7;font-size:16px}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-.container{max-width:960px;margin:0 auto;padding:0 24px}
-
-/* Hero */
+.container{max-width:900px;margin:0 auto;padding:0 24px}
+code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.9em;font-family:'SF Mono',Consolas,monospace}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85em;line-height:1.5;font-family:'SF Mono',Consolas,monospace;margin:16px 0}
+pre code{background:none;padding:0}
+h1{font-size:2.6em;font-weight:700;letter-spacing:-1px}
+h2{font-size:1.8em;font-weight:700;margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--accent)}
+h3{font-size:1.3em;font-weight:600;margin:32px 0 12px;color:var(--purple)}
+h4{font-size:1.1em;font-weight:600;margin:24px 0 8px;color:var(--cyan)}
+p{margin:12px 0}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.9em}
+th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}
+th{background:var(--surface);font-weight:600;color:var(--accent)}
+tr:nth-child(even){background:rgba(22,27,34,0.5)}
+ul,ol{margin:12px 0 12px 24px}li{margin:4px 0}
 .hero{text-align:center;padding:80px 0 48px;border-bottom:1px solid var(--border)}
-.hero h1{font-size:3em;font-weight:700;letter-spacing:-1px;margin-bottom:8px}
-.hero h1 span{color:var(--accent)}
-.hero .tagline{color:var(--dim);font-size:1.2em;max-width:640px;margin:0 auto 24px}
+.hero .tagline{color:var(--dim);font-size:1.15em;max-width:640px;margin:12px auto 24px}
 .hero .badges span{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.85em;margin:4px;font-weight:600}
 .badge-alac{background:#1a3a1a;color:var(--green);border:1px solid #238636}
 .badge-aac{background:#1a2a3a;color:var(--accent);border:1px solid #1f6feb}
-.badge-api{background:#2a1a3a;color:var(--purple);border:1px solid #8957e5}
-
-/* Sections */
-section{padding:48px 0;border-bottom:1px solid var(--border)}
-section:last-child{border-bottom:none}
-h2{font-size:1.8em;margin-bottom:24px;color:var(--text);font-weight:700}
-h2 .icon{margin-right:8px}
-h3{font-size:1.2em;margin:20px 0 10px;color:var(--accent)}
-
-/* Architecture */
-.arch-diagram{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;overflow-x:auto;font-family:'SF Mono',SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;font-size:0.85em;line-height:1.8;white-space:pre;color:var(--dim)}
-.arch-diagram .highlight{color:var(--accent)}
-.arch-diagram .green{color:var(--green)}
-.arch-diagram .purple{color:var(--purple)}
-.arch-diagram .orange{color:var(--orange)}
-
-/* Tables */
-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.92em}
-th,td{padding:10px 14px;text-align:left;border:1px solid var(--border)}
-th{background:var(--surface);color:var(--accent);font-weight:600}
-td{color:var(--text)}
-tr:nth-child(even) td{background:rgba(22,27,34,0.5)}
-code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.9em;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;color:var(--orange)}
-pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85em;line-height:1.6;margin:12px 0}
-pre code{background:none;padding:0}
-
-/* Module cards */
-.modules{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.mod-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
-.mod-card .name{color:var(--accent);font-weight:600;font-family:monospace;font-size:1.05em}
-.mod-card .desc{color:var(--dim);font-size:0.9em;margin-top:6px}
-.mod-card .lines{color:var(--purple);font-size:0.8em;margin-top:4px}
-
-/* Pipeline steps */
-.step{display:flex;align-items:flex-start;gap:16px;margin:16px 0;padding:16px;background:var(--surface);border-radius:8px;border-left:3px solid var(--accent)}
-.step-num{background:var(--accent);color:var(--bg);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:0.9em}
+.badge-api{background:#2a1a3a;color:var(--purple);border:1px solid #8b5cf6}
+.badge-24bit{background:#3a2a1a;color:var(--orange);border:1px solid #d29922}
+.lang-toggle{position:absolute;top:20px;right:24px;font-size:0.9em}
+.lang-toggle a{margin:0 4px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 28px;margin:32px 0}
+.toc h3{margin:0 0 12px;color:var(--text);font-size:1.1em}
+.toc ol{margin:0;padding-left:20px}.toc li{margin:3px 0;font-size:0.95em}
+.note{background:rgba(56,139,253,0.1);border:1px solid rgba(56,139,253,0.3);border-radius:8px;padding:12px 16px;margin:16px 0;font-size:0.9em}
+.fix-box{background:rgba(63,185,80,0.08);border:1px solid rgba(63,185,80,0.3);border-radius:8px;padding:16px;margin:16px 0}
+.fix-box h4{color:var(--green);margin-top:0}
+.bug-box{background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.3);border-radius:8px;padding:16px;margin:16px 0}
+.bug-box h4{color:var(--red);margin-top:0}
+.diagram{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}
+.diagram pre{border:none;margin:0;padding:0;background:none}
+.step{display:flex;align-items:flex-start;gap:16px;margin:24px 0;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.step-num{flex-shrink:0;width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1em}
 .step-content{flex:1}
-.step-content strong{color:var(--text)}
-.step-content p{color:var(--dim);margin-top:4px;font-size:0.92em}
-
-/* Config table */
-.config-val{color:var(--green);font-family:monospace}
-
-/* Footer */
-footer{padding:32px 0;text-align:center;color:var(--dim);font-size:0.85em;border-top:1px solid var(--border)}
-footer a{color:var(--accent)}
+.step-content h4{margin-top:0;color:var(--text)}
+details{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin:16px 0}
+details summary{padding:12px 16px;cursor:pointer;font-weight:600;color:var(--accent)}
+details summary:hover{background:rgba(56,139,253,0.1)}
+details[open] summary{border-bottom:1px solid var(--border)}
+details .inner{padding:16px}
+footer{border-top:1px solid var(--border);padding:32px 0;margin-top:64px;text-align:center;color:var(--dim);font-size:0.9em}
+@media(max-width:600px){.hero h1{font-size:2em}.step{flex-direction:column}.lang-toggle{position:static;text-align:center;padding:12px}}
 </style>
 </head>
 <body>
-<nav style="position:fixed;top:16px;right:24px;z-index:100;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 14px;"><strong style="color:var(--text);">English</strong> <span style="color:var(--dim);">|</span> <a href="cn.html">中文</a></nav>
+<div style="position:relative"><div class="lang-toggle"><a href="index.html"><b>English</b></a> | <a href="cn.html">中文</a></div></div>
+<div class="container">
 
-<!-- Hero -->
 <div class="hero">
-  <div class="container">
-    <h1><span>aria</span></h1>
-    <p class="tagline">HTTP API service for downloading Apple Music tracks in AAC and Hi-Res Lossless ALAC (24-bit / 48 kHz). Built for speed, reliability, and integration.</p>
-    <div class="badges">
-      <span class="badge-alac">ALAC 24-bit</span>
-      <span class="badge-aac">AAC 256k</span>
-      <span class="badge-api">REST API</span>
-    </div>
-  </div>
+<h1><span>aria</span></h1>
+<p class="tagline">Apple Music Lossless Audio Service — an HTTP API and pipeline for downloading Apple Music tracks in AAC 256k and Hi-Res ALAC 24-bit/48kHz+.</p>
+<div class="badges">
+<span class="badge-alac">ALAC 24-bit</span>
+<span class="badge-aac">AAC 256k</span>
+<span class="badge-api">REST API</span>
+<span class="badge-24bit">48/96/192 kHz</span>
+</div>
 </div>
 
-<!-- Architecture -->
-<section>
-  <div class="container">
-    <h2><span class="icon">&#9881;</span> Architecture</h2>
-    <div class="arch-diagram"><span class="highlight">Client</span> (aria_lite.py / curl / any HTTP client)
-  │
-  ├─ <span class="green">GET /download/&lt;id&gt;?fmt=alac</span>
-  │
-  ▼
-<span class="highlight">aria server</span> (Flask :8899)
-  │
-  ├─ <span class="purple">apple_api.py</span>    → Apple Music catalog API (metadata, HLS URLs)
-  ├─ <span class="purple">m3u8_select.py</span>  → Pick best ALAC variant from HLS master
-  ├─ <span class="purple">m4s_parser.py</span>   → Parse fragmented MP4, extract encrypted samples
-  │
-  ├─ <span class="orange">DecryptPool</span> (round-robin N sidecar instances)
-  │   ├─ <span class="green">sidecar :47010</span> → FairPlay sample-by-sample decrypt
-  │   ├─ <span class="green">sidecar :47011</span> → (instance 2)
-  │   └─ <span class="green">sidecar :47020</span> → HLS master URL resolution
-  │
-  ├─ <span class="purple">m4a_writer.py</span>   → Patch decrypted samples back into ALAC m4a
-  │   ├─ Rename <span class="orange">enca → alac</span> in ALL stsd entries
-  │   └─ Neutralize <span class="orange">senc/saiz/saio</span> → free boxes
-  │
-  └─ <span class="green">Response</span>: decrypted .m4a (tagged with metadata + cover art)</div>
-  </div>
-</section>
+<nav class="toc">
+<h3>Table of Contents</h3>
+<ol>
+<li><a href="#pipeline">The ALAC Pipeline</a>
+  <ol>
+    <li><a href="#step1">Metadata &amp; HLS Resolution</a></li>
+    <li><a href="#step2">Variant Selection</a></li>
+    <li><a href="#step3">Fragmented MP4 Parsing</a></li>
+    <li><a href="#step4">Sample-by-Sample Processing</a></li>
+    <li><a href="#step5">M4A Container Repair</a></li>
+    <li><a href="#step6">Metadata Tagging</a></li>
+  </ol>
+</li>
+<li><a href="#architecture">System Architecture</a></li>
+<li><a href="#multi-instance">Multi-Instance Architecture</a></li>
+<li><a href="#api">API Reference</a></li>
+<li><a href="#modules">Modules</a></li>
+<li><a href="#config">Configuration</a></li>
+<li><a href="#perf">Performance</a></li>
+</ol>
+</nav>
 
-<!-- API Reference -->
-<section>
-  <div class="container">
-    <h2><span class="icon">&#128279;</span> API Reference</h2>
-    <table>
-      <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-      <tr><td><code>GET</code></td><td><code>/health</code></td><td>Service health + per-instance decrypt status</td></tr>
-      <tr><td><code>GET</code></td><td><code>/search?q=term&amp;type=songs</code></td><td>Search songs, albums, artists (paginated)</td></tr>
-      <tr><td><code>GET</code></td><td><code>/song/&lt;id&gt;</code></td><td>Song metadata (title, artist, artwork, lyrics flag, ISRC)</td></tr>
-      <tr><td><code>GET</code></td><td><code>/album/&lt;id&gt;</code></td><td>Album detail + paginated track list</td></tr>
-      <tr><td><code>GET</code></td><td><code>/artist/&lt;id&gt;</code></td><td>Artist detail + paginated albums</td></tr>
-      <tr><td><code>GET</code></td><td><code>/download/&lt;id&gt;</code></td><td>Download track (default AAC; <code>?fmt=alac</code> for Hi-Res)</td></tr>
-      <tr><td><code>GET</code></td><td><code>/album/&lt;id&gt;/download</code></td><td>Download entire album as ZIP</td></tr>
-      <tr><td><code>POST</code></td><td><code>/batch</code></td><td>Batch download: <code>{"ids":[...],"fmt":"alac"}</code></td></tr>
-    </table>
-    <p style="color:var(--dim);font-size:0.9em;margin-top:8px">All endpoints except <code>/</code> and <code>/health</code> require <code>Authorization: Bearer TOKEN</code>.</p>
-  </div>
-</section>
+<h2 id="pipeline">The ALAC Pipeline</h2>
+<p>Apple Music delivers lossless audio via HTTP Live Streaming (HLS). Audio is encoded in ALAC (Apple Lossless Audio Codec) at up to 24-bit/192kHz and packaged inside fragmented MP4 containers (ISO Base Media File Format). aria's pipeline has six stages, each solving a distinct engineering challenge.</p>
 
-<!-- Modules -->
-<section>
-  <div class="container">
-    <h2><span class="icon">&#128230;</span> Modules</h2>
-    <div class="modules">
-      <div class="mod-card">
-        <div class="name">server.py</div>
-        <div class="desc">Flask HTTP API — routes, auth, download orchestration, DecryptPool integration</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">apple_api.py</div>
-        <div class="desc">Apple Music REST client — catalog search, song/album metadata, token bootstrap</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">aria_rpc.py</div>
-        <div class="desc">TCP pipelined client for sidecar — sends encrypted samples, receives plaintext</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">decryptor.py</div>
-        <div class="desc">ALAC pipeline orchestrator — PersistentDecryptSession, DecryptPool, prefetch</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">m3u8_select.py</div>
-        <div class="desc">HLS variant picker — selects best ALAC stream by sample rate and bit depth</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">m4s_parser.py</div>
-        <div class="desc">Fragmented MP4 parser — extracts samples, trun offsets, sample descriptions</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">m4a_writer.py</div>
-        <div class="desc">ALAC m4a output — patches stsd (enca→alac), neutralizes encryption metadata</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">aac_decrypt.py</div>
-        <div class="desc">AAC pipeline — Widevine CDM + mp4decrypt for AAC 256k tier</div>
-      </div>
-      <div class="mod-card">
-        <div class="name">aria_sidecar.py</div>
-        <div class="desc">Process manager — spawns N sidecar instances, health checks, auto-restart</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Quick Start -->
-<section>
-  <div class="container">
-    <h2><span class="icon">&#9889;</span> Quick Start</h2>
-<pre><code># 1. Install dependencies
-pip install -r requirements.txt   # flask, httpx, m3u8, pywidevine, mutagen
-
-# 2. Configure Apple Music credentials
-mkdir -p ~/.config/aria
-cat &gt; ~/.config/aria/config.json &lt;&lt;'EOF'
+<div class="step" id="step1">
+<div class="step-num">1</div>
+<div class="step-content">
+<h4>Metadata &amp; HLS Resolution</h4>
+<p>Every track is identified by an <code>adamId</code> — a numeric catalog identifier (e.g. <code>1850496033</code>). The pipeline begins by resolving this to streaming metadata via Apple's <code>amp-api.music.apple.com</code> REST API.</p>
+<p>A <code>GET /v1/catalog/{storefront}/songs/{id}</code> request returns: title, artist, album, artwork URLs, duration, ISRC, composer credits, and audio traits (lossless, spatial, Atmos).</p>
+<p>The <b>storefront</b> parameter controls regional availability. A track may exist in <code>us</code> but not <code>cn</code> — particularly relevant for new releases where disc 2 tracks may appear in one region days before another.</p>
+<p>To obtain the HLS master playlist URL, aria sends a <b>WebPlayback</b> request to <code>play.itunes.apple.com</code>, returning streaming assets categorized by <i>flavor</i> — codecs like <code>28:ctrp256</code> (AAC 256k) and ALAC variants.</p>
+<pre><code>// WebPlayback response (simplified)
 {
-  "accessToken": "eyJh...",
-  "mediaUserToken": "0.AmW..."
-}
-EOF
+  "songList": [{
+    "assets": [
+      {"flavor": "28:ctrp256", "URL": "https://aod-ssl.itunes.apple.com/..."}
+    ],
+    "hls-key-server-url": "https://play.itunes.apple.com/.../acquireWebPlaybackLicense",
+    "hls-playlist-url": "https://aod.itunes.apple.com/.../P1443135819_default.m3u8"
+  }]
+}</code></pre>
+</div>
+</div>
 
-# 3. Start sidecar (FairPlay decrypt service)
-python3 aria_sidecar.py -F --instances 2
+<div class="step" id="step2">
+<div class="step-num">2</div>
+<div class="step-content">
+<h4>Variant Selection</h4>
+<p>The HLS master playlist lists multiple audio variants. aria's <code>m3u8_select.py</code> parses this and selects the best ALAC variant.</p>
+<h4>Audio Quality Tiers</h4>
+<table>
+<tr><th>Codec</th><th>Sample Rate</th><th>Bit Depth</th><th>Typical Bitrate</th><th>~4 min Track</th></tr>
+<tr><td>AAC</td><td>44.1 kHz</td><td>—</td><td>256 kbps</td><td>~7.5 MB</td></tr>
+<tr><td>ALAC</td><td>44.1 kHz</td><td>16-bit</td><td>~700 kbps</td><td>~21 MB</td></tr>
+<tr><td>ALAC</td><td>48 kHz</td><td>24-bit</td><td>~1,500 kbps</td><td>~45 MB</td></tr>
+<tr><td>ALAC</td><td>96 kHz</td><td>24-bit</td><td>~3,000 kbps</td><td>~90 MB</td></tr>
+<tr><td>ALAC</td><td>192 kHz</td><td>24-bit</td><td>~6,000 kbps</td><td>~180 MB</td></tr>
+</table>
+<p>The selection picks the highest sample rate ALAC up to <code>max_sample_rate_hz</code> (default 192kHz). The variant also carries <b>key URIs</b> — SKD URLs identifying which key contexts apply to which segments, extracted via regex matching <code>skd://itunes.apple.com/...</code>.</p>
+<pre><code>AlacVariant(
+    sample_rate_hz=48000, bit_depth=24,
+    average_bandwidth=1536000,
+    stream_url="https://aod-ssl.itunes.apple.com/.../_m.mp4",
+    keys=["skd://.../P000000000/s1/e1",   # prefetch context
+          "skd://.../p1443135819/c6"]      # content key
+)</code></pre>
+</div>
+</div>
 
-# 4. Start aria server
-export API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-export ARIA_INSTANCES=2
-python3 server.py --port 8899
+<div class="step" id="step3">
+<div class="step-num">3</div>
+<div class="step-content">
+<h4>Fragmented MP4 Parsing</h4>
+<p>The selected variant's <code>stream_url</code> points to a single fragmented MP4 (fMP4) containing the entire track. Unlike regular MP4 where all metadata is in <code>moov</code>, fMP4 splits audio into <b>fragments</b> — each with its own <code>moof</code>/<code>mdat</code> pair.</p>
 
-# 5. Use it
-curl -H "Authorization: Bearer $API_TOKEN" \
-  "http://localhost:8899/download/1615585008?fmt=alac" -o song.m4a</code></pre>
-  </div>
-</section>
+<h4>ISO BMFF Box Structure</h4>
+<p>An MP4 is a tree of <i>boxes</i> (atoms). Each box: 4-byte size + 4-byte type + payload. aria's <code>m4s_parser.py</code> walks this tree to locate every audio sample.</p>
 
-<!-- ALAC Pipeline Deep Dive -->
-<section>
-  <div class="container">
-    <h2><span class="icon">&#128269;</span> ALAC Pipeline Deep Dive</h2>
-    <p style="color:var(--dim);margin-bottom:20px">How a single ALAC track goes from Apple's CDN to a playable .m4a file:</p>
+<div class="diagram">
+<pre style="color:var(--green);font-size:0.78em">┌─ ftyp ─────────────────────────────────────────────────────────────┐
+│  File type: iso5, isom, hlsf                                       │
+└────────────────────────────────────────────────────────────────────-┘
+┌─ moov ─────────────────────────────────────────────────────────────┐
+│  └─ trak → mdia → minf → stbl                                     │
+│     └─ <b style="color:var(--orange)">stsd</b> (sample descriptions)                                  │
+│        ├─ <b style="color:var(--red)">enca</b> [1] ── sinf (protection) + alac (codec config)       │
+│        └─ <b style="color:var(--red)">enca</b> [2] ── sinf (protection) + alac (codec config)       │
+└────────────────────────────────────────────────────────────────────-┘
+┌─ moof (fragment 1) ── tfhd: desc_index=<b style="color:var(--orange)">1</b> ────────────────────────┐
+│  └─ traf                                                           │
+│     ├─ <b style="color:var(--cyan)">trun</b>  sample_count=175, sizes[], durations[]                │
+│     ├─ senc  sample encryption IVs + subsample ranges              │
+│     ├─ saiz  auxiliary info sizes per sample                       │
+│     └─ saio  auxiliary info offsets                                 │
+├─ mdat ─── [sample bytes × 175] ───────────────────────────────────┤
+└────────────────────────────────────────────────────────────────────-┘
+┌─ moof (fragment 2) ── tfhd: desc_index=<b style="color:var(--orange)">2</b> ────────────────────────┐
+│  └─ traf  (trun: 165 samples + senc/saiz/saio)                    │
+├─ mdat ─── [sample bytes × 165] ───────────────────────────────────┤
+└────────────────────────────────────────────────────────────────────-┘
+  ... fragments 3–16 (desc_index=2)</pre>
+</div>
 
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-content">
-        <strong>Resolve HLS Master</strong>
-        <p>sidecar's m3u8 port (47020) resolves an Apple Music adamId to an enhanced-HLS master playlist URL. <code>m3u8_select.py</code> picks the highest quality ALAC variant (typically 48 kHz / 24-bit).</p>
-      </div>
-    </div>
+<h4>Sample Extraction</h4>
+<p>Each <code>trun</code> (Track Run) contains per-sample size/duration entries. The parser walks <code>mdat</code> payloads using these sizes:</p>
+<pre><code>offset = mdat_payload_start
+for entry in trun.entries:
+    sample_data = buf[offset : offset + entry.size]
+    samples.append(Sample(data=sample_data, desc_index=tfhd.desc_index))
+    offset += entry.size</code></pre>
 
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-content">
-        <strong>Download Encrypted Stream</strong>
-        <p>The selected variant URL points to a single fragmented MP4 file (~50 MB for a 4-minute song). <code>m4s_parser.py</code> parses it into individual encrypted samples (typically 2000-3000 per track).</p>
-      </div>
-    </div>
+<p>The <code>desc_index</code> (from <code>tfhd</code>) tells which key context applies. Fragment 1 uses index 1; fragments 2–16 use index 2.</p>
 
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-content">
-        <strong>FairPlay Decrypt</strong>
-        <p><code>aria_rpc.py</code> sends each sample to sidecar over a pipelined TCP connection (port 47010). Writer and reader threads run concurrently — writer pushes ciphertext, reader collects plaintext. ~4 seconds for a full track.</p>
-      </div>
-    </div>
+<div class="note">A typical 4-minute ALAC track at 48kHz/24-bit: ~2,650 samples across 16 fragments, ~48 MB total. Each sample ≈ 18 KB — one ALAC frame of 4,096 PCM samples.</div>
+</div>
+</div>
 
-    <div class="step">
-      <div class="step-num">4</div>
-      <div class="step-content">
-        <strong>Patch Container (m4a_writer)</strong>
-        <p>The critical step. Three transformations turn the encrypted fragmented MP4 into a valid ALAC file:</p>
-        <p>a) Rename <strong>all</strong> <code>enca</code> sample entries to <code>alac</code> in stsd (not just the first — the original bug)</p>
-        <p>b) Remove <code>sinf</code> boxes (DRM metadata) from each entry</p>
-        <p>c) Overwrite <code>senc</code>/<code>saiz</code>/<code>saio</code> boxes in every <code>traf</code> with <code>free</code> (neutralize encryption flags)</p>
-      </div>
-    </div>
+<div class="step" id="step4">
+<div class="step-num">4</div>
+<div class="step-content">
+<h4>Sample-by-Sample Processing</h4>
+<p>Extracted samples are processed through a localhost TCP service using a <b>pipelined dual-thread architecture</b>.</p>
 
-    <div class="step">
-      <div class="step-num">5</div>
-      <div class="step-content">
-        <strong>Tag &amp; Serve</strong>
-        <p>Metadata (title, artist, album, cover art) is embedded via mutagen's MP4 atoms. The file is cached and served as a standard .m4a download.</p>
-      </div>
-    </div>
-  </div>
-</section>
+<div class="diagram">
+<pre style="color:var(--cyan);font-size:0.78em">Writer thread                    Processing service (:47010)             Reader thread
+─────────────                    ───────────────────────────             ─────────────
+     │                                      │                                │
+     │── key context header ───────────────►│                                │
+     │   (adamId + key URI)                 │◄── establish context           │
+     │                                      │                                │
+     │── [uint32 len][sample 0] ──────────►│                                │
+     │── [uint32 len][sample 1] ──────────►│── process ──►[result 0] ──────►│
+     │── [uint32 len][sample 2] ──────────►│── process ──►[result 1] ──────►│
+     │── ...                                │── process ──►[result 2] ──────►│
+     │                                      │                                │
+     │── [0x00000000] (end context) ──────►│                                │
+     │── new key context ─────────────────►│                                │
+     │── [samples for context 2] ─────────►│── process ──►[results] ───────►│</pre>
+</div>
 
-<!-- Configuration -->
-<section>
-  <div class="container">
-    <h2><span class="icon">&#9881;</span> Configuration</h2>
-    <table>
-      <tr><th>Environment Variable</th><th>Default</th><th>Description</th></tr>
-      <tr><td><code>API_TOKEN</code></td><td class="config-val">(required)</td><td>Bearer token for API authentication</td></tr>
-      <tr><td><code>ARIA_INSTANCES</code></td><td class="config-val">1</td><td>Number of parallel sidecar decrypt instances</td></tr>
-      <tr><td><code>ARIA_HOST</code></td><td class="config-val">127.0.0.1</td><td>Sidecar host address</td></tr>
-      <tr><td><code>ARIA_DECRYPT_PORT</code></td><td class="config-val">47010</td><td>Base decrypt port (instances use +0, +1, +2...)</td></tr>
-      <tr><td><code>ARIA_M3U8_PORT</code></td><td class="config-val">47020</td><td>Base m3u8 port</td></tr>
-      <tr><td><code>STOREFRONT</code></td><td class="config-val">us</td><td>Apple Music storefront region</td></tr>
-      <tr><td><code>CACHE_DIR</code></td><td class="config-val">/tmp/am_cache</td><td>Cached decrypted files directory</td></tr>
-      <tr><td><code>ARIA_CONFIG</code></td><td class="config-val">~/.config/aria/config.json</td><td>Apple Music credentials file</td></tr>
-      <tr><td><code>MAX_ALBUM_TRACKS</code></td><td class="config-val">30</td><td>Max tracks per album download</td></tr>
-      <tr><td><code>MAX_BATCH_SIZE</code></td><td class="config-val">50</td><td>Max IDs per batch request</td></tr>
-    </table>
-  </div>
-</section>
+<h4>Concurrency Control</h4>
+<p>Writer and reader run in separate threads, gated by a <b>semaphore(64)</b>. Writer acquires before each send; reader releases after each read. This backpressure prevents TCP buffer flooding when processing is slower than the network.</p>
 
-<!-- Footer -->
+<h4>Key Context Switching</h4>
+<p>When <code>desc_index</code> changes between fragments, the writer sends <code>0x00000000</code> then a new key context header. A typical track has 2 contexts: init/prefetch and content.</p>
+
+<p><b>Throughput:</b> ~12 MB/s on loopback — a 48 MB track in ~4 seconds.</p>
+</div>
+</div>
+
+<div class="step" id="step5">
+<div class="step-num">5</div>
+<div class="step-content">
+<h4>M4A Container Repair</h4>
+<p>After processing, we have the original fMP4 plus processed sample data (same lengths). <code>m4a_writer.py</code> does an <b>in-place structural patch</b>.</p>
+
+<div class="bug-box">
+<h4>The Problem: Only First Fragment Played</h4>
+<p>Initial implementation: 50 MB file but only 14.9 seconds of audio decoded (175/2,650 samples). The remaining 93% was silent.</p>
+</div>
+
+<h4>Root Cause 1: Incomplete stsd Patching</h4>
+<p><code>stsd</code> had <b>two</b> <code>enca</code> entries. Code renamed the first to <code>alac</code> and removed its <code>sinf</code>, then <code>break</code>ed — leaving entry #2 untouched. Fragment 1 used desc_index=1 (patched, worked). Fragments 2–16 used desc_index=2 (still <code>enca</code>, demuxer refused).</p>
+
+<h4>Root Cause 2: Residual Encryption Metadata</h4>
+<p>Each <code>traf</code> had <code>senc</code>/<code>saiz</code>/<code>saio</code> boxes telling demuxers samples were still protected — even after renaming <code>enca</code>→<code>alac</code>.</p>
+
+<div class="fix-box">
+<h4>The Fix</h4>
+<p><b>A)</b> Iterate ALL <code>enca</code> entries in <code>stsd</code>: rename type to <code>alac</code>, remove <code>sinf</code>, adjust ancestor sizes.</p>
+<p><b>B)</b> Walk every <code>traf</code>: overwrite <code>senc</code>/<code>saiz</code>/<code>saio</code> type fields with <code>free</code> (standard ISO BMFF padding box). Same size = preserves all byte offsets.</p>
+<pre><code>for traf in find_all_trafs(buf):
+    for box_type in [b'senc', b'saiz', b'saio']:
+        for box in find_boxes(traf, box_type):
+            buf[box.offset+4 : box.offset+8] = b'free'</code></pre>
+</div>
+
+<details>
+<summary>Why ffmpeg remux loses data on fragmented ALAC</summary>
+<div class="inner">
+<p><code>ffmpeg -c copy -movflags +faststart</code> reads the <code>moov</code> duration, which in fMP4 only describes the first segment (~15s). The remuxed output drops all subsequent fragments. The in-place patch avoids this by preserving the original fragment structure.</p>
+</div>
+</details>
+</div>
+</div>
+
+<div class="step" id="step6">
+<div class="step-num">6</div>
+<div class="step-content">
+<h4>Metadata Tagging</h4>
+<p>The processed m4a has no metadata. aria embeds iTunes atoms using <code>mutagen</code>.</p>
+<h4>iTunes Atom Format</h4>
+<p>MP4 metadata lives in <code>moov/udta/meta/ilst</code>. Each item is a data atom with a well-known key:</p>
+<table>
+<tr><th>Atom</th><th>Field</th><th>Example</th></tr>
+<tr><td><code>©nam</code></td><td>Title</td><td>The Fate of Ophelia</td></tr>
+<tr><td><code>©ART</code></td><td>Artist</td><td>Taylor Swift</td></tr>
+<tr><td><code>©alb</code></td><td>Album</td><td>The Life of a Showgirl</td></tr>
+<tr><td><code>©gen</code></td><td>Genre</td><td>Pop</td></tr>
+<tr><td><code>©wrt</code></td><td>Composer</td><td>Taylor Swift, Max Martin</td></tr>
+<tr><td><code>trkn</code></td><td>Track #</td><td>(1, 16)</td></tr>
+<tr><td><code>disk</code></td><td>Disc #</td><td>(1, 2)</td></tr>
+<tr><td><code>covr</code></td><td>Cover Art</td><td>JPEG 1200×1200 from Apple CDN</td></tr>
+</table>
+</div>
+</div>
+
+<h2 id="architecture">System Architecture</h2>
+<div class="diagram">
+<pre style="color:var(--text);font-size:0.78em">
+  <b style="color:var(--accent)">aria_lite.py</b> (client)                     <b style="color:var(--green)">aria server</b> (Flask :8899)
+  ─────────────────────                     ──────────────────────────
+        │                                           │
+        │  GET /download/&lt;id&gt;?fmt=alac              │
+        ├──────────────────────────────────────────►│
+        │                                  ┌────────┤
+        │                                  │ <b style="color:var(--cyan)">apple_api</b>    → catalog API
+        │                                  │ <b style="color:var(--cyan)">m3u8_select</b>  → pick ALAC
+        │                                  │ <b style="color:var(--cyan)">m4s_parser</b>   → extract samples
+        │                                  │                │
+        │                                  │ <b style="color:var(--purple)">DecryptPool</b>  (round-robin)
+        │                                  │ ┌──────────────┤
+        │                                  │ │ <b style="color:var(--orange)">sidecar</b> :47010/:47020
+        │                                  │ │ <b style="color:var(--orange)">sidecar</b> :47011/:47021
+        │                                  │ └──────────────┤
+        │                                  │ <b style="color:var(--cyan)">m4a_writer</b>   → container fix
+        │                                  │ <b style="color:var(--cyan)">mutagen</b>      → metadata tags
+        │                                  └────────┤
+        │◄──────────────────────────────────────────┤
+        │  200 OK (audio/mp4, ~48 MB)               │
+        ├── verify + tag + optional NOS upload      │</pre>
+</div>
+
+<h2 id="multi-instance">Multi-Instance Architecture</h2>
+<h3>DecryptPool: Round-Robin + Per-Instance Mutex</h3>
+<pre><code>class DecryptPool:
+    def __init__(self, instances=4):
+        self._instance_locks = [threading.Lock() for _ in range(instances)]
+        self._round_robin = 0
+
+    def process_track(self, samples, keys, track_id):
+        idx = self._round_robin
+        self._round_robin = (idx + 1) % self._instances
+        with self._instance_locks[idx]:  # one track per instance
+            return self._process(idx, samples, keys, track_id)</code></pre>
+
+<h4>Why Not Persistent Connections?</h4>
+<p>An earlier design reused TCP connections across tracks. After 2–3 tracks, session state accumulated and corrupted, crashing the service. Fix: <b>fresh TCP connection per track</b>. Overhead: ~1ms connect vs 4s processing.</p>
+
+<h4>Scaling</h4>
+<pre><code>ARIA_INSTANCES=4 python3 server.py --port 8899
+# Instance 0: 47010/47020  │  Instance 1: 47011/47021
+# Instance 2: 47012/47022  │  Instance 3: 47013/47023</code></pre>
+
+<h2 id="api">API Reference</h2>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td><code>GET</code></td><td><code>/health</code></td><td>Service health + per-instance status</td></tr>
+<tr><td><code>GET</code></td><td><code>/search?q=...&amp;type=songs</code></td><td>Search catalog</td></tr>
+<tr><td><code>GET</code></td><td><code>/song/&lt;id&gt;</code></td><td>Song metadata</td></tr>
+<tr><td><code>GET</code></td><td><code>/album/&lt;id&gt;</code></td><td>Album + track list</td></tr>
+<tr><td><code>GET</code></td><td><code>/artist/&lt;id&gt;</code></td><td>Artist + albums</td></tr>
+<tr><td><code>GET</code></td><td><code>/download/&lt;id&gt;?fmt=alac</code></td><td>Download track</td></tr>
+<tr><td><code>GET</code></td><td><code>/album/&lt;id&gt;/download</code></td><td>Album as ZIP</td></tr>
+<tr><td><code>POST</code></td><td><code>/batch</code></td><td>Batch download</td></tr>
+</table>
+
+<h2 id="modules">Modules</h2>
+<table>
+<tr><th>Module</th><th>Lines</th><th>Role</th></tr>
+<tr><td><code>server.py</code></td><td>~500</td><td>HTTP API, DecryptPool, tagging</td></tr>
+<tr><td><code>apple_api.py</code></td><td>~290</td><td>Apple catalog client</td></tr>
+<tr><td><code>m3u8_select.py</code></td><td>~130</td><td>HLS variant picker</td></tr>
+<tr><td><code>m4s_parser.py</code></td><td>~440</td><td>fMP4 parser, sample extraction</td></tr>
+<tr><td><code>m4a_writer.py</code></td><td>~200</td><td>Container repair</td></tr>
+<tr><td><code>decryptor.py</code></td><td>~420</td><td>Pipeline orchestrator, DecryptPool</td></tr>
+<tr><td><code>aria_rpc.py</code></td><td>~310</td><td>TCP pipelined client</td></tr>
+<tr><td><code>aria_sidecar.py</code></td><td>~480</td><td>N-instance sidecar manager</td></tr>
+</table>
+
+<h2 id="config">Configuration</h2>
+<table>
+<tr><th>Env Var</th><th>Default</th><th>Description</th></tr>
+<tr><td><code>API_TOKEN</code></td><td><i>required</i></td><td>Bearer token</td></tr>
+<tr><td><code>ARIA_INSTANCES</code></td><td><code>1</code></td><td>Parallel processing instances</td></tr>
+<tr><td><code>STOREFRONT</code></td><td><code>us</code></td><td>Catalog region</td></tr>
+<tr><td><code>CACHE_DIR</code></td><td><code>/tmp/am_cache</code></td><td>File cache</td></tr>
+<tr><td><code>ARIA_CONFIG</code></td><td><code>~/.config/aria/config.json</code></td><td>Credentials</td></tr>
+</table>
+
+<h2 id="perf">Performance</h2>
+<table>
+<tr><th>Stage</th><th>Time</th><th>Notes</th></tr>
+<tr><td>Metadata + HLS</td><td>~2s</td><td>Apple API latency</td></tr>
+<tr><td>Stream download</td><td>~3s</td><td>CDN ~16 MB/s</td></tr>
+<tr><td>fMP4 parsing</td><td>&lt;0.1s</td><td>CPU, in-memory</td></tr>
+<tr><td>Processing</td><td>~4s</td><td>~12 MB/s loopback</td></tr>
+<tr><td>Container repair</td><td>&lt;0.1s</td><td>In-place patching</td></tr>
+<tr><td>Tagging</td><td>~1s</td><td>+ cover download</td></tr>
+<tr><td><b>Total</b></td><td><b>~10s</b></td><td>Single track e2e</td></tr>
+</table>
+<p><i>Full sidecar vs wrapper benchmarks will be published here.</i></p>
+
 <footer>
-  <div class="container">
-    <p><strong>aria</strong> &mdash; built with <a href="https://github.com/overkazaf/sidecar">sidecar</a> for FairPlay decryption</p>
-    <p style="margin-top:8px">Inspired by the Apple Music open-source community</p>
-  </div>
+<p>aria is built on <a href="https://overkazaf.github.io/sidecar/">sidecar</a> for FairPlay audio processing.</p>
+<p><a href="https://github.com/overkazaf/aria">GitHub</a> · <a href="https://github.com/overkazaf/sidecar">sidecar</a> · MIT License</p>
 </footer>
 
+</div>
 </body>
 </html>
