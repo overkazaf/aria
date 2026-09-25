@@ -671,11 +671,47 @@ def _decrypt_via_pool(song_id, out_dir, storefront, auth_token, media_user_token
         elapsed_seconds=0)
 
 
+
+def _decrypt_via_pool_streaming(song_id, out_dir, storefront, auth_token, media_user_token):
+    """Streaming decrypt — 94% less memory than standard path."""
+    from am_alac import decryptor as _dec
+    idx = _pool._pick()
+    dp, mp = _pool._ports[idx]
+    lock = _pool._instance_locks[idx]
+
+    lock.acquire()
+    try:
+        result = _dec.decrypt_one_track_streaming(
+            song_id=song_id,
+            out_dir=out_dir,
+            storefront=storefront,
+            authorization_token=auth_token,
+            media_user_token=media_user_token,
+            aria_host=ARIA_HOST,
+            aria_decrypt_port=dp,
+            aria_m3u8_port=mp,
+        )
+    finally:
+        lock.release()
+
+    _tag_m4a(result.out_path, None)  # tag with basic info
+    return result
+
+
 def _download_alac(song_id: str, out_path: str):
     authorization_token, media_user_token = _apple_credentials()
+    streaming = request.args.get("streaming", "1") != "0"  # default ON
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = _decrypt_via_pool(song_id, tmpdir, STOREFRONT,
-            authorization_token, media_user_token)
+        if streaming:
+            try:
+                result = _decrypt_via_pool_streaming(song_id, tmpdir, STOREFRONT,
+                    authorization_token, media_user_token)
+            except Exception:
+                result = _decrypt_via_pool(song_id, tmpdir, STOREFRONT,
+                    authorization_token, media_user_token)
+        else:
+            result = _decrypt_via_pool(song_id, tmpdir, STOREFRONT,
+                authorization_token, media_user_token)
         shutil.copy2(result.out_path, out_path)
     try:
         with _apple_client() as ac:

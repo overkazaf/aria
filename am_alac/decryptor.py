@@ -21,7 +21,7 @@ from typing import Optional, List, Callable
 
 import httpx
 
-from . import apple_api, m3u8_select, m4a_writer, m4s_parser, aria_rpc
+from . import apple_api, m3u8_select, m4a_writer, m4s_parser, aria_rpc, streaming_bmff
 
 _URL_ALBUM_RE = re.compile(
     r"https?://(?:beta\.)?music\.apple\.com/(?P<sf>[a-z]{2})/album/[^/]+/(?P<id>\d+)")
@@ -458,6 +458,82 @@ def decrypt_one_track(
         bit_depth=prep.variant.bit_depth,
         samples_count=len(prep.parsed.samples),
         decrypted_bytes=prep.parsed.total_data_size,
+        elapsed_seconds=elapsed,
+    )
+
+
+
+def decrypt_one_track_streaming(
+    *,
+    song_id: str,
+    out_dir: str,
+    storefront: str = "us",
+    authorization_token: Optional[str] = None,
+    media_user_token: Optional[str] = None,
+    aria_host: str = "127.0.0.1",
+    aria_decrypt_port: int = 47010,
+    aria_m3u8_port: int = 47020,
+    max_sample_rate_hz: int = 192_000,
+    apple_proxy: Optional[str] = None,
+    progress: Optional[Callable] = None,
+) -> DecryptResult:
+    """Streaming decrypt — download+parse+decrypt+write in one pass.
+
+    Peak memory: ~200 KB regardless of track size (vs ~180 MB standard path).
+    Uses streaming_bmff to avoid loading the entire M4S into RAM.
+    """
+    start = time.monotonic()
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 1. Get song metadata
+    if progress:
+        progress("meta", song_id)
+    with apple_api.AppleMusicClient(
+        authorization_token=authorization_token,
+        media_user_token=media_user_token,
+        proxy=apple_proxy,
+    ) as ac:
+        song = ac.get_song(song_id, storefront)
+
+    # 2. Get HLS master URL via aria m3u8 port
+    master_url = aria_rpc.fetch_master_playlist(
+        song_id, host=aria_host, port=aria_m3u8_port)
+
+    # 3. Pick ALAC variant
+    with httpx.Client(timeout=30.0, follow_redirects=True) as hc:
+        master_text, _ = m3u8_select.fetch_master(master_url, client=hc)
+    variant = m3u8_select.pick_alac_variant(
+        master_text, master_url, max_sample_rate_hz=max_sample_rate_hz)
+
+    # 4. Stream download + decrypt + write in one pass
+    safe_title = re.sub(r'[/\\<>:"|?*]', "_", song.title)
+    base_name = f"{song_id}_{safe_title}".rstrip(". ")
+    out_path = os.path.join(out_dir, f"{base_name}.m4a")
+
+    if progress:
+        progress("decrypt", 0)
+
+    result = streaming_bmff.stream_download_decrypt(
+        stream_url=variant.stream_url,
+        keys=variant.keys,
+        track_id=song_id,
+        out_path=out_path,
+        aria_host=aria_host,
+        aria_port=aria_decrypt_port,
+        progress=lambda done, total: progress("decrypt-progress", (done, total)) if progress else None,
+    )
+
+    elapsed = time.monotonic() - start
+    if progress:
+        progress("done", out_path)
+
+    return DecryptResult(
+        song_id=song_id,
+        out_path=out_path,
+        sample_rate=result.sample_rate,
+        bit_depth=result.bit_depth,
+        samples_count=result.samples_count,
+        decrypted_bytes=result.total_bytes,
         elapsed_seconds=elapsed,
     )
 
