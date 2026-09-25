@@ -132,11 +132,10 @@ def patch_to_alac_m4a(
     parents = ancestors[:-1]   # moov..stbl
     stsd_box = ancestors[-1]
 
-    # Iterate the stsd's SampleEntry list to find `enca`.
+    # Iterate stsd's SampleEntry list: patch ALL `enca` → `alac`, remove sinf.
     entry_cursor = stsd_box.payload_offset + 4 + 4   # skip vf + entry_count
     end_of_stsd = stsd_box.end_offset
-    sinf_size_removed = 0   # signed delta to propagate up
-    enca_size_after_patch = 0
+    total_sinf_removed = 0
     enca_offset = -1
 
     while entry_cursor < end_of_stsd:
@@ -146,7 +145,6 @@ def patch_to_alac_m4a(
             entry_cursor += entry_size
             continue
 
-        # AudioSampleEntry: 8-byte hdr + 28 audio fields = 36 byte prelude
         child_search_start = entry_cursor + 36
         child_search_end = entry_cursor + entry_size
 
@@ -156,27 +154,41 @@ def patch_to_alac_m4a(
                 sinf_location = child
                 break
 
+        this_removed = 0
         if sinf_location is not None:
-            # Splice out the sinf bytes
-            del output[sinf_location.offset: sinf_location.offset + sinf_location.size]
-            sinf_size_removed = sinf_location.size
-            # Update enca's own size field
-            _set_box_size(output, entry_cursor, entry_size - sinf_size_removed)
+            this_removed = sinf_location.size
+            del output[sinf_location.offset: sinf_location.offset + this_removed]
+            _set_box_size(output, entry_cursor, entry_size - this_removed)
+            total_sinf_removed += this_removed
+            end_of_stsd -= this_removed
 
-        # Rename the entry: enca → alac (4-byte rename, no size change)
         output[entry_cursor + 4: entry_cursor + 8] = b"alac"
         enca_offset = entry_cursor
-        enca_size_after_patch = entry_size - sinf_size_removed
-        break
+        entry_cursor += entry_size - this_removed
 
     if enca_offset < 0:
         raise ValueError("no enca SampleEntry found inside stsd")
 
-    # If we removed bytes, every ancestor (stsd, stbl, minf, mdia, trak, moov)
-    # must shrink by the same amount.
-    if sinf_size_removed:
-        for parent in ancestors:   # includes stsd itself
-            _set_box_size(output, parent.offset, parent.size - sinf_size_removed)
+    if total_sinf_removed:
+        for parent in ancestors:
+            _set_box_size(output, parent.offset, parent.size - total_sinf_removed)
+
+    # ── step 2b: neutralise encryption boxes (senc/saiz/saio) in every traf ──
+    _ENC_BOX_TYPES = {b"senc", b"saiz", b"saio"}
+    for moof_box in iter_boxes(bytes(output)):
+        if moof_box.type != b"moof":
+            continue
+        moof_cs, moof_ce = _container_child_range(moof_box)
+        for traf_box in iter_boxes(bytes(output), moof_cs, moof_ce):
+            if traf_box.type != b"traf":
+                continue
+            traf_cs, traf_ce = _container_child_range(traf_box)
+            for enc_box in iter_boxes(bytes(output), traf_cs, traf_ce):
+                if enc_box.type in _ENC_BOX_TYPES:
+                    output[enc_box.offset + 4: enc_box.offset + 8] = b"free"
+                    payload_len = enc_box.size - enc_box.header_size
+                    output[enc_box.payload_offset: enc_box.offset + enc_box.size] = (
+                        b"\x00" * payload_len)
 
     # ── step 3: write to disk ─────────────────────────────────────────────
     if out_path == "-":

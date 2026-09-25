@@ -38,6 +38,7 @@ DOWNLOAD_TIMEOUT_PER_TRACK = 60  # seconds
 ARIA_HOST = os.environ.get("ARIA_HOST", "127.0.0.1")
 ARIA_DECRYPT_PORT = int(os.environ.get("ARIA_DECRYPT_PORT", "47010"))
 ARIA_M3U8_PORT = int(os.environ.get("ARIA_M3U8_PORT", "47020"))
+ARIA_INSTANCES = int(os.environ.get("ARIA_INSTANCES", "1"))
 CACHE_DIR = os.environ.get("CACHE_DIR", "/tmp/am_cache")
 STOREFRONT = os.environ.get("STOREFRONT", "us")
 ARIA_CONFIG = Path(os.environ.get(
@@ -83,8 +84,12 @@ def _check_token():
             401,
         )
 
-_session = decryptor.PersistentDecryptSession(
-    host=ARIA_HOST, port=ARIA_DECRYPT_PORT)
+_pool = decryptor.DecryptPool(
+    host=ARIA_HOST,
+    base_decrypt_port=ARIA_DECRYPT_PORT,
+    base_m3u8_port=ARIA_M3U8_PORT,
+    instances=ARIA_INSTANCES,
+    timeout=600.0)
 
 
 def _safe_filename(s: str) -> str:
@@ -168,19 +173,29 @@ def _load_aria_config() -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _apple_credentials() -> tuple[str | None, str | None]:
+    cfg = _load_aria_config() or {}
+    token = str(cfg.get("accessToken") or "").strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    media_user_token = str(cfg.get("mediaUserToken") or "").strip()
+    return token or None, media_user_token or None
+
+
+def _apple_client() -> apple_api.AppleMusicClient:
+    token, media_user_token = _apple_credentials()
+    return apple_api.AppleMusicClient(
+        authorization_token=token,
+        media_user_token=media_user_token,
+    )
+
+
 def _get_apple_headers() -> dict:
-    cfg = _load_aria_config()
     headers = {
         "Origin": "https://music.apple.com",
         "Content-Type": "application/json;charset=utf-8",
     }
-    token = ""
-    media_user_token = ""
-    if cfg:
-        token = str(cfg.get("accessToken") or "").strip()
-        media_user_token = str(cfg.get("mediaUserToken") or "").strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
+    token, media_user_token = _apple_credentials()
     if not token:
         token = apple_api.get_web_token()
     headers["Authorization"] = "Bearer " + token
@@ -562,7 +577,7 @@ def download_song(song_id: str):
     cached = _get_cached_path(song_id, fmt)
     if os.path.isfile(cached):
         try:
-            with apple_api.AppleMusicClient() as ac:
+            with _apple_client() as ac:
                 song = ac.get_song(song_id, STOREFRONT)
             dl_name = f"{_safe_filename(song.artist)} - {_safe_filename(song.title)}.m4a"
         except Exception:
@@ -579,15 +594,50 @@ def download_song(song_id: str):
         return _json_error(_redact_error(e), 500)
 
 
+
+def _decrypt_via_pool(song_id, out_dir, storefront, auth_token, media_user_token):
+    """Decrypt one track — non-persistent connection per track for stability."""
+    from am_alac import decryptor as _dec, aria_rpc
+    idx = _pool._pick()
+    dp, mp = _pool._ports[idx]
+    lock = _pool._instance_locks[idx]
+    
+    prep = _dec._prepare_track(
+        song_id, storefront, ARIA_HOST, mp,
+        192_000, auth_token, media_user_token, None)
+
+    lock.acquire()
+    try:
+        decrypted = aria_rpc.decrypt_samples_pipelined(
+            prep.parsed.samples, prep.variant.keys,
+            track_id=song_id, host=ARIA_HOST, port=dp, timeout=600)
+    finally:
+        lock.release()
+
+    safe_title = re.sub(r'[/\\<>:"|?*]', "_", prep.song.title)
+    base_name = f"{song_id}_{safe_title}".rstrip(". ")
+    out_path = os.path.join(out_dir, f"{base_name}.m4a")
+
+    from am_alac import m4a_writer
+    m4a_writer.patch_to_alac_m4a(prep.parsed, decrypted, out_path)
+
+    return _dec.DecryptResult(
+        song_id=song_id, out_path=out_path,
+        sample_rate=prep.variant.sample_rate_hz,
+        bit_depth=prep.variant.bit_depth,
+        samples_count=len(prep.parsed.samples),
+        decrypted_bytes=prep.parsed.total_data_size,
+        elapsed_seconds=0)
+
+
 def _download_alac(song_id: str, out_path: str):
+    authorization_token, media_user_token = _apple_credentials()
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = decryptor.decrypt_one_track(
-            song_id=song_id, out_dir=tmpdir, storefront=STOREFRONT,
-            aria_host=ARIA_HOST, aria_decrypt_port=ARIA_DECRYPT_PORT,
-            aria_m3u8_port=ARIA_M3U8_PORT, _session=_session)
+        result = _decrypt_via_pool(song_id, tmpdir, STOREFRONT,
+            authorization_token, media_user_token)
         shutil.copy2(result.out_path, out_path)
     try:
-        with apple_api.AppleMusicClient() as ac:
+        with _apple_client() as ac:
             song = ac.get_song(song_id, STOREFRONT)
         dl_name = f"{_safe_filename(song.artist)} - {_safe_filename(song.title)}.m4a"
     except Exception:
@@ -604,7 +654,7 @@ def _download_aac(song_id: str, out_path: str):
     except Exception as e:
         return _json_error(f"AAC decrypt failed: {_redact_error(e)}", 500)
     try:
-        with apple_api.AppleMusicClient() as ac:
+        with _apple_client() as ac:
             song = ac.get_song(song_id, STOREFRONT)
         dl_name = f"{_safe_filename(song.artist)} - {_safe_filename(song.title)}.m4a"
     except Exception:
@@ -617,21 +667,19 @@ def _download_aac(song_id: str, out_path: str):
 
 @app.route("/health")
 def health():
-    import socket
-    checks = {}
-    for name, port in [("aria_decrypt", ARIA_DECRYPT_PORT), ("aria_m3u8", ARIA_M3U8_PORT)]:
-        try:
-            s = socket.create_connection((ARIA_HOST, port), timeout=2)
-            s.close()
-            checks[name] = "up"
-        except Exception:
-            checks[name] = "down"
+    pool_health = _pool.health()
     cache_files = list(Path(CACHE_DIR).glob("*.m4a"))
-    checks["cache_files"] = len(cache_files)
-    checks["cache_mb"] = round(sum(f.stat().st_size for f in cache_files) / 1e6, 1)
-    status = "healthy" if all(
-        v == "up" for k, v in checks.items() if isinstance(v, str)) else "degraded"
-    return jsonify({"status": status, **checks})
+    up = pool_health.pop("instances_up", 0)
+    total = pool_health.pop("instances_total", 1)
+    status = "healthy" if up == total else ("degraded" if up > 0 else "down")
+    return jsonify({
+        "status": status,
+        "instances_up": up,
+        "instances_total": total,
+        "cache_files": len(cache_files),
+        "cache_mb": round(sum(f.stat().st_size for f in cache_files) / 1e6, 1),
+        **pool_health,
+    })
 
 
 # ─────────────────────── Batch ───────────────────────
@@ -664,11 +712,10 @@ def batch_download():
             continue
         try:
             if fmt == "alac":
+                authorization_token, media_user_token = _apple_credentials()
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    r = decryptor.decrypt_one_track(
-                        song_id=sid, out_dir=tmpdir, storefront=STOREFRONT,
-                        aria_host=ARIA_HOST, aria_decrypt_port=ARIA_DECRYPT_PORT,
-                        aria_m3u8_port=ARIA_M3U8_PORT, _session=_session)
+                    r = _decrypt_via_pool(sid, tmpdir, STOREFRONT,
+                        authorization_token, media_user_token)
                     shutil.copy2(r.out_path, cached)
                 results.append({"id": sid, "status": "ok", "size": os.path.getsize(cached),
                                 "elapsed": round(r.elapsed_seconds, 2)})
@@ -756,11 +803,10 @@ def album_download(album_id: str):
             t0 = _time.monotonic()
             try:
                 if fmt == "alac":
+                    authorization_token, media_user_token = _apple_credentials()
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        r = decryptor.decrypt_one_track(
-                            song_id=sid, out_dir=tmpdir, storefront=sf,
-                            aria_host=ARIA_HOST, aria_decrypt_port=ARIA_DECRYPT_PORT,
-                            aria_m3u8_port=ARIA_M3U8_PORT, _session=_session)
+                        r = _decrypt_via_pool(sid, tmpdir, sf,
+                            authorization_token, media_user_token)
                         shutil.copy2(r.out_path, cached)
                 else:
                     aac_decrypt.download_aac(sid, cached)

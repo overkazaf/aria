@@ -34,8 +34,11 @@ UA_BROWSER = (
 
 # Apple changed their bundle naming around 2025-Q1: was "index-legacy-<hex>.js"
 # (hyphen separator), now "index-legacy~<hex>.js" (tilde separator). Accept both.
-# JWT chars: [A-Za-z0-9_.\-] — `.` is the section separator; we need it.
-_TOKEN_RE = re.compile(rb'eyJh[A-Za-z0-9_.\-]{100,800}')
+# Apple has shipped both {"alg":...} and {"typ":...,"alg":...} JWT headers.
+# Match a generic three-part JWT instead of assuming a fixed base64 prefix.
+_TOKEN_RE = re.compile(
+    rb'eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}'
+)
 _INDEX_JS_RE = re.compile(rb"/assets/index(?:-legacy)?[~\-][A-Za-z0-9_]+\.js")
 
 

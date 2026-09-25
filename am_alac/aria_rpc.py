@@ -59,7 +59,7 @@ def fetch_master_playlist(
     *,
     host: str = "127.0.0.1",
     port: int = 47020,
-    timeout: float = 30.0,
+    timeout: float = 600.0,
 ) -> str:
     if not adam_id.isdigit():
         raise ValueError(f"adamId must be ASCII digits, got {adam_id!r}")
@@ -101,7 +101,7 @@ class DecryptSession:
         *,
         host: str = "127.0.0.1",
         port: int = 47010,
-        timeout: float = 120.0,
+        timeout: float = 600.0,
     ):
         if not track_id:
             raise ValueError("track_id must be non-empty")
@@ -185,7 +185,7 @@ def decrypt_samples_pipelined(
     *,
     host: str = "127.0.0.1",
     port: int = 47010,
-    timeout: float = 120.0,
+    timeout: float = 600.0,
     pipeline_depth: int = 64,
     progress: Optional[callable] = None,
 ) -> List[bytes]:
@@ -290,7 +290,7 @@ def decrypt_samples_streaming(
     *,
     host: str = "127.0.0.1",
     port: int = 47010,
-    timeout: float = 120.0,
+    timeout: float = 600.0,
     pipeline_depth: int = 64,
     progress: Optional[callable] = None,
 ) -> int:

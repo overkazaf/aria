@@ -1,6 +1,9 @@
 import importlib
 import os
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ["API_TOKEN"] = "test-token"
@@ -61,6 +64,67 @@ class ServerSecurityTest(unittest.TestCase):
             server._get_cached_path("../secret", "aac")
         with self.assertRaises(ValueError):
             server._get_cached_path("1440841263", "../aac")
+
+    def test_apple_headers_use_configured_bearer_token(self):
+        with patch.object(
+            server,
+            "_load_aria_config",
+            return_value={
+                "accessToken": "Bearer configured-token",
+                "mediaUserToken": "configured-mut",
+            },
+        ), patch.object(server.apple_api, "get_web_token", side_effect=AssertionError):
+            headers = server._get_apple_headers()
+        self.assertEqual(headers["Authorization"], "Bearer configured-token")
+        self.assertEqual(headers["Media-User-Token"], "configured-mut")
+
+    def test_alac_download_passes_configured_apple_credentials(self):
+        captured = {}
+        old_cache_dir = server.CACHE_DIR
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server.CACHE_DIR = tmpdir
+            source_path = Path(tmpdir) / "source.m4a"
+
+            def fake_decrypt_one_track(**kwargs):
+                captured.update(kwargs)
+                source_path.write_bytes(b"fake m4a")
+                return SimpleNamespace(out_path=str(source_path), elapsed_seconds=0.1)
+
+            try:
+                with patch.object(
+                    server,
+                    "_load_aria_config",
+                    return_value={
+                        "accessToken": "Bearer configured-token",
+                        "mediaUserToken": "configured-mut",
+                    },
+                ), patch.object(
+                    server.decryptor,
+                    "decrypt_one_track",
+                    side_effect=fake_decrypt_one_track,
+                ), patch.object(
+                    server.apple_api,
+                    "AppleMusicClient",
+                    side_effect=RuntimeError("skip filename lookup"),
+                ):
+                    resp = self.client.get(
+                        "/download/1440841263?fmt=alac",
+                        headers=self.auth_headers(),
+                    )
+            finally:
+                server.CACHE_DIR = old_cache_dir
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(captured["authorization_token"], "configured-token")
+        self.assertEqual(captured["media_user_token"], "configured-mut")
+
+    def test_web_token_regex_accepts_typ_first_jwt(self):
+        token = (
+            b"eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6IldlYlBsYXlLaWQifQ."
+            b"eyJpc3MiOiJBTVBXZWJQbGF5IiwiaWF0IjoxNzg1Nzg3MjkyLCJleHAiOjE3OTE4MzUyOTJ9."
+            b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+        )
+        self.assertEqual(server.apple_api._TOKEN_RE.search(token).group(0), token)
 
 
 if __name__ == "__main__":

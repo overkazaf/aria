@@ -213,6 +213,134 @@ class PersistentDecryptSession:
         self.close()
 
 
+
+
+# ━━━━━━━━━━━━━━━━━━━━ Multi-instance pool (opt #4) ━━━━━━━━━━━━━━━━
+
+class DecryptPool:
+    """Round-robin pool of PersistentDecryptSession instances.
+
+    Distributes decrypt work across N wrapper_new instances running
+    on consecutive port pairs. Thread-safe — Flask's threaded mode
+    can call concurrently from multiple request threads.
+
+    Usage:
+        pool = DecryptPool("127.0.0.1", instances=4)
+        # instances on ports (47010,47020), (47011,47021), (47012,47022), (47013,47023)
+        decrypted = pool.decrypt_track(samples, keys, track_id)
+    """
+
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        base_decrypt_port: int = 47010,
+        base_m3u8_port: int = 47020,
+        instances: int = 1,
+        timeout: float = 600.0,
+    ):
+        self._host = host
+        self._instances = instances
+        self._timeout = timeout
+        self._ports: List[tuple[int, int]] = []
+        self._sessions: List[PersistentDecryptSession] = []
+        self._instance_locks: List[threading.Lock] = []
+        self._round_robin = 0
+        self._pool_lock = threading.Lock()
+
+        for i in range(instances):
+            dp = base_decrypt_port + i
+            mp = base_m3u8_port + i
+            self._ports.append((dp, mp))
+            self._sessions.append(
+                PersistentDecryptSession(host, dp, timeout))
+            self._instance_locks.append(threading.Lock())
+
+    def _pick(self) -> int:
+        """Round-robin pick, each instance is mutually exclusive."""
+        with self._pool_lock:
+            idx = self._round_robin
+            self._round_robin = (self._round_robin + 1) % self._instances
+            return idx
+
+    def _release(self, idx: int):
+        pass  # lock-based, no counter needed
+
+    @property
+    def m3u8_port(self) -> int:
+        """Return the m3u8 port of the least-busy instance."""
+        idx = self._pick()
+        self._release(idx)
+        return self._ports[idx][1]
+
+    def decrypt_track(
+        self,
+        samples: List[aria_rpc.Sample],
+        keys: list[str],
+        track_id: str,
+        progress: Optional[Callable] = None,
+    ) -> List[bytes]:
+        """Decrypt using round-robin instance, one track per instance at a time."""
+        if not samples:
+            return []
+        idx = self._pick()
+        lock = self._instance_locks[idx]
+        lock.acquire()
+        try:
+            return self._sessions[idx].decrypt_track_pipelined(
+                samples, keys, track_id, progress)
+        except Exception:
+            next_idx = (idx + 1) % self._instances
+            lock.release()
+            lock = self._instance_locks[next_idx]
+            lock.acquire()
+            try:
+                return self._sessions[next_idx].decrypt_track_pipelined(
+                    samples, keys, track_id, progress)
+            except Exception:
+                raise
+            finally:
+                lock.release()
+            return []  # unreachable
+        finally:
+            try:
+                lock.release()
+            except RuntimeError:
+                pass
+
+    def health(self) -> dict:
+        """Per-instance health status."""
+        import socket as _socket
+        result = {}
+        for i, (dp, mp) in enumerate(self._ports):
+            checks = {}
+            for name, port in [("decrypt", dp), ("m3u8", mp)]:
+                try:
+                    s = _socket.create_connection(
+                        (self._host, port), timeout=2)
+                    s.close()
+                    checks[name] = "up"
+                except Exception:
+                    checks[name] = "down"
+            with self._pool_lock:
+                checks["busy"] = 1 if self._instance_locks[i].locked() else 0
+            result[f"instance_{i}"] = checks
+        up_count = sum(
+            1 for v in result.values()
+            if v["decrypt"] == "up" and v["m3u8"] == "up")
+        result["instances_up"] = up_count
+        result["instances_total"] = self._instances
+        return result
+
+    def close(self):
+        for s in self._sessions:
+            s.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
 # ━━━━━━━━━━━━━━━━━━━━ Prefetch + overlap pipeline (opt #1, #3) ━━━━━━━━━━━━
 
 def _prepare_track(
