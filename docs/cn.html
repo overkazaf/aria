@@ -48,6 +48,31 @@ pre code{background:none;padding:0}
 .config-val{color:var(--green);font-family:monospace}
 footer{padding:32px 0;text-align:center;color:var(--dim);font-size:0.85em;border-top:1px solid var(--border)}
 footer a{color:var(--accent)}
+
+/* Floating Language Switcher */
+.lang-switch {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(30, 35, 45, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(100, 120, 150, 0.3);
+  border-radius: 20px;
+  padding: 4px;
+  font-size: 13px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+.lang-switch .lang-icon { padding: 4px 6px; font-size: 14px; }
+.lang-switch a, .lang-switch span:not(.lang-icon) {
+  padding: 6px 14px; border-radius: 16px;
+  text-decoration: none; color: #8b949e; transition: all 0.2s;
+}
+.lang-switch .active { background: #238636; color: #fff; }
+.lang-switch a:hover { color: #fff; text-decoration: none; }
 </style>
 </head>
 <body>

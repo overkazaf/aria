@@ -53,10 +53,35 @@ details[open] summary{border-bottom:1px solid var(--border)}
 details .inner{padding:16px}
 footer{border-top:1px solid var(--border);padding:32px 0;margin-top:64px;text-align:center;color:var(--dim);font-size:0.9em}
 @media(max-width:600px){.hero h1{font-size:2em}.step{flex-direction:column}.lang-toggle{position:static;text-align:center;padding:12px}}
+
+/* Floating Language Switcher */
+.lang-switch {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(30, 35, 45, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(100, 120, 150, 0.3);
+  border-radius: 20px;
+  padding: 4px;
+  font-size: 13px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+.lang-switch .lang-icon { padding: 4px 6px; font-size: 14px; }
+.lang-switch a, .lang-switch span:not(.lang-icon) {
+  padding: 6px 14px; border-radius: 16px;
+  text-decoration: none; color: #8b949e; transition: all 0.2s;
+}
+.lang-switch .active { background: #238636; color: #fff; }
+.lang-switch a:hover { color: #fff; text-decoration: none; }
 </style>
 </head>
 <body>
-<div style="position:relative"><div class="lang-toggle"><a href="index.html"><b>English</b></a> | <a href="cn.html">中文</a></div></div>
+<div style="position:relative"><div class="lang-switch"><span class="lang-icon">🌐</span><span class="active">EN</span><a href="cn.html">中文</a></div>
 <div class="container">
 
 <div class="hero">
