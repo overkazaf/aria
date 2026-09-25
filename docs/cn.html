@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aria — Apple Music 无损音频服务</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#bc8cff;--red:#f85149;--orange:#d29922}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;line-height:1.7}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.hero{text-align:center;padding:80px 0 48px;border-bottom:1px solid var(--border)}
+.hero h1{font-size:3em;font-weight:700;letter-spacing:-1px;margin-bottom:8px}
+.hero h1 span{color:var(--accent)}
+.hero .tagline{color:var(--dim);font-size:1.2em;max-width:640px;margin:0 auto 24px}
+.hero .badges span{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.85em;margin:4px;font-weight:600}
+.badge-alac{background:#1a3a1a;color:var(--green);border:1px solid #238636}
+.badge-aac{background:#1a2a3a;color:var(--accent);border:1px solid #1f6feb}
+.badge-api{background:#2a1a3a;color:var(--purple);border:1px solid #8957e5}
+section{padding:48px 0;border-bottom:1px solid var(--border)}
+section:last-child{border-bottom:none}
+h2{font-size:1.8em;margin-bottom:24px;color:var(--text);font-weight:700}
+h2 .icon{margin-right:8px}
+h3{font-size:1.2em;margin:20px 0 10px;color:var(--accent)}
+.arch-diagram{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;overflow-x:auto;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:0.85em;line-height:1.8;white-space:pre;color:var(--dim)}
+.arch-diagram .highlight{color:var(--accent)}
+.arch-diagram .green{color:var(--green)}
+.arch-diagram .purple{color:var(--purple)}
+.arch-diagram .orange{color:var(--orange)}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.92em}
+th,td{padding:10px 14px;text-align:left;border:1px solid var(--border)}
+th{background:var(--surface);color:var(--accent);font-weight:600}
+td{color:var(--text)}
+tr:nth-child(even) td{background:rgba(22,27,34,0.5)}
+code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.9em;font-family:'SF Mono',Consolas,monospace;color:var(--orange)}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85em;line-height:1.6;margin:12px 0}
+pre code{background:none;padding:0}
+.modules{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.mod-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.mod-card .name{color:var(--accent);font-weight:600;font-family:monospace;font-size:1.05em}
+.mod-card .desc{color:var(--dim);font-size:0.9em;margin-top:6px}
+.step{display:flex;align-items:flex-start;gap:16px;margin:16px 0;padding:16px;background:var(--surface);border-radius:8px;border-left:3px solid var(--accent)}
+.step-num{background:var(--accent);color:var(--bg);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:0.9em}
+.step-content{flex:1}
+.step-content strong{color:var(--text)}
+.step-content p{color:var(--dim);margin-top:4px;font-size:0.92em}
+.config-val{color:var(--green);font-family:monospace}
+footer{padding:32px 0;text-align:center;color:var(--dim);font-size:0.85em;border-top:1px solid var(--border)}
+footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- 语言切换 -->
+<nav style="position:fixed;top:16px;right:24px;z-index:100;font-size:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 14px;">
+  <a href="index.html">English</a> <span style="color:var(--dim);">|</span> <strong style="color:var(--text);">中文</strong>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="container">
+    <h1><span>aria</span></h1>
+    <p class="tagline">Apple Music 无损音频下载服务 — 提供 AAC 和 Hi-Res ALAC（24-bit / 48 kHz）的 HTTP API 接口。追求速度、稳定和易集成。</p>
+    <div class="badges">
+      <span class="badge-alac">ALAC 24-bit</span>
+      <span class="badge-aac">AAC 256k</span>
+      <span class="badge-api">REST API</span>
+    </div>
+  </div>
+</div>
+
+<!-- 架构 -->
+<section>
+  <div class="container">
+    <h2><span class="icon">&#9881;</span> 架构</h2>
+    <div class="arch-diagram"><span class="highlight">客户端</span> (aria_lite.py / curl / 任意 HTTP 客户端)
+  │
+  ├─ <span class="green">GET /download/&lt;id&gt;?fmt=alac</span>
+  │
+  ▼
+<span class="highlight">aria 服务</span> (Flask :8899)
+  │
+  ├─ <span class="purple">apple_api.py</span>    → Apple Music 目录 API（元数据、HLS URL）
+  ├─ <span class="purple">m3u8_select.py</span>  → 从 HLS 主播放列表中选择最佳 ALAC 变体
+  ├─ <span class="purple">m4s_parser.py</span>   → 解析 fragmented MP4，提取加密 samples
+  │
+  ├─ <span class="orange">DecryptPool</span>（轮询 N 个 sidecar 实例）
+  │   ├─ <span class="green">sidecar :47010</span> → FairPlay 逐 sample 解密
+  │   ├─ <span class="green">sidecar :47011</span> →（实例 2）
+  │   └─ <span class="green">sidecar :47020</span> → HLS 主播放列表 URL 解析
+  │
+  ├─ <span class="purple">m4a_writer.py</span>   → 将解密数据写回 ALAC m4a
+  │   ├─ 重命名 <span class="orange">enca → alac</span>（所有 stsd 条目）
+  │   └─ 清除 <span class="orange">senc/saiz/saio</span> → free 空盒
+  │
+  └─ <span class="green">响应</span>: 解密后的 .m4a（含元数据 + 封面）</div>
+  </div>
+</section>
+
+<!-- API 参考 -->
+<section>
+  <div class="container">
+    <h2><span class="icon">&#128279;</span> API 参考</h2>
+    <table>
+      <tr><th>方法</th><th>端点</th><th>说明</th></tr>
+      <tr><td><code>GET</code></td><td><code>/health</code></td><td>服务健康状态 + 各解密实例状态</td></tr>
+      <tr><td><code>GET</code></td><td><code>/search?q=关键词&amp;type=songs</code></td><td>搜索歌曲、专辑、艺术家（分页）</td></tr>
+      <tr><td><code>GET</code></td><td><code>/song/&lt;id&gt;</code></td><td>歌曲元数据（标题、艺术家、封面、歌词标志、ISRC）</td></tr>
+      <tr><td><code>GET</code></td><td><code>/album/&lt;id&gt;</code></td><td>专辑详情 + 分页曲目列表</td></tr>
+      <tr><td><code>GET</code></td><td><code>/artist/&lt;id&gt;</code></td><td>艺术家详情 + 分页专辑列表</td></tr>
+      <tr><td><code>GET</code></td><td><code>/download/&lt;id&gt;</code></td><td>下载单曲（默认 AAC；<code>?fmt=alac</code> 获取 Hi-Res）</td></tr>
+      <tr><td><code>GET</code></td><td><code>/album/&lt;id&gt;/download</code></td><td>整张专辑下载（ZIP）</td></tr>
+      <tr><td><code>POST</code></td><td><code>/batch</code></td><td>批量下载：<code>{"ids":[...],"fmt":"alac"}</code></td></tr>
+    </table>
+    <p style="color:var(--dim);font-size:0.9em;margin-top:8px">除 <code>/</code> 和 <code>/health</code> 外，所有端点需要 <code>Authorization: Bearer TOKEN</code>。</p>
+  </div>
+</section>
+
+<!-- 模块 -->
+<section>
+  <div class="container">
+    <h2><span class="icon">&#128230;</span> 模块说明</h2>
+    <div class="modules">
+      <div class="mod-card">
+        <div class="name">server.py</div>
+        <div class="desc">Flask HTTP API — 路由、认证、下载编排、DecryptPool 集成</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">apple_api.py</div>
+        <div class="desc">Apple Music REST 客户端 — 目录搜索、歌曲/专辑元数据、token 引导</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">aria_rpc.py</div>
+        <div class="desc">sidecar TCP 流水线客户端 — 发送加密 samples，接收明文</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">decryptor.py</div>
+        <div class="desc">ALAC 流水线编排器 — PersistentDecryptSession、DecryptPool、预取</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">m3u8_select.py</div>
+        <div class="desc">HLS 变体选择器 — 按采样率和位深选择最佳 ALAC 流</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">m4s_parser.py</div>
+        <div class="desc">Fragmented MP4 解析器 — 提取 samples、trun 偏移、sample descriptions</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">m4a_writer.py</div>
+        <div class="desc">ALAC m4a 输出 — 修补 stsd（enca→alac），清除加密元数据</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">aac_decrypt.py</div>
+        <div class="desc">AAC 流水线 — Widevine CDM + mp4decrypt 处理 AAC 256k 层级</div>
+      </div>
+      <div class="mod-card">
+        <div class="name">aria_sidecar.py</div>
+        <div class="desc">进程管理器 — 启动 N 个 sidecar 实例，健康检查，自动重启</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 快速开始 -->
+<section>
+  <div class="container">
+    <h2><span class="icon">&#9889;</span> 快速开始</h2>
+<pre><code># 1. 安装依赖
+pip install -r requirements.txt   # flask, httpx, m3u8, pywidevine, mutagen
+
+# 2. 配置 Apple Music 凭据
+mkdir -p ~/.config/aria
+cat &gt; ~/.config/aria/config.json &lt;&lt;'EOF'
+{
+  "accessToken": "eyJh...",
+  "mediaUserToken": "0.AmW..."
+}
+EOF
+
+# 3. 启动 sidecar（FairPlay 解密服务）
+python3 aria_sidecar.py -F --instances 2
+
+# 4. 启动 aria 服务
+export API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+export ARIA_INSTANCES=2
+python3 server.py --port 8899
+
+# 5. 使用
+curl -H "Authorization: Bearer $API_TOKEN" \
+  "http://localhost:8899/download/1615585008?fmt=alac" -o song.m4a</code></pre>
+  </div>
+</section>
+
+<!-- ALAC 流水线深入解析 -->
+<section>
+  <div class="container">
+    <h2><span class="icon">&#128269;</span> ALAC 解密流水线深入解析</h2>
+    <p style="color:var(--dim);margin-bottom:20px">一首 ALAC 歌曲从 Apple CDN 到可播放 .m4a 文件的完整旅程：</p>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <strong>解析 HLS 主播放列表</strong>
+        <p>sidecar 的 m3u8 端口（47020）将 Apple Music adamId 解析为 enhanced-HLS 主播放列表 URL。<code>m3u8_select.py</code> 选择最高质量的 ALAC 变体（通常为 48 kHz / 24-bit）。</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <strong>下载加密流</strong>
+        <p>选定的变体 URL 指向单个 fragmented MP4 文件（4 分钟歌曲约 50 MB）。<code>m4s_parser.py</code> 将其解析为独立的加密 samples（每首歌通常 2000-3000 个）。</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <strong>FairPlay 解密</strong>
+        <p><code>aria_rpc.py</code> 通过流水线 TCP 连接（端口 47010）将每个 sample 发送给 sidecar。writer 和 reader 线程并发运行——writer 推送密文，reader 收集明文。单首歌约 4 秒。</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <strong>修补容器格式（m4a_writer）</strong>
+        <p>关键步骤。三个转换将加密的 fragmented MP4 变为有效的 ALAC 文件：</p>
+        <p>a) 重命名 stsd 中<strong>所有</strong> <code>enca</code> sample entry 为 <code>alac</code>（不只是第一个——这是原始 bug）</p>
+        <p>b) 移除每个 entry 中的 <code>sinf</code> 盒（DRM 元数据）</p>
+        <p>c) 将每个 <code>traf</code> 中的 <code>senc</code>/<code>saiz</code>/<code>saio</code> 盒覆写为 <code>free</code>（清除加密标志）</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <strong>打标签 &amp; 输出</strong>
+        <p>通过 mutagen 的 MP4 atoms 嵌入元数据（标题、艺术家、专辑、封面）。文件被缓存并作为标准 .m4a 提供下载。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 配置参考 -->
+<section>
+  <div class="container">
+    <h2><span class="icon">&#9881;</span> 配置参考</h2>
+    <table>
+      <tr><th>环境变量</th><th>默认值</th><th>说明</th></tr>
+      <tr><td><code>API_TOKEN</code></td><td class="config-val">（必填）</td><td>API 认证 Bearer token</td></tr>
+      <tr><td><code>ARIA_INSTANCES</code></td><td class="config-val">1</td><td>并行 sidecar 解密实例数</td></tr>
+      <tr><td><code>ARIA_HOST</code></td><td class="config-val">127.0.0.1</td><td>sidecar 主机地址</td></tr>
+      <tr><td><code>ARIA_DECRYPT_PORT</code></td><td class="config-val">47010</td><td>解密基础端口（实例依次 +0, +1, +2...）</td></tr>
+      <tr><td><code>ARIA_M3U8_PORT</code></td><td class="config-val">47020</td><td>m3u8 基础端口</td></tr>
+      <tr><td><code>STOREFRONT</code></td><td class="config-val">us</td><td>Apple Music 商店区域</td></tr>
+      <tr><td><code>CACHE_DIR</code></td><td class="config-val">/tmp/am_cache</td><td>解密文件缓存目录</td></tr>
+      <tr><td><code>ARIA_CONFIG</code></td><td class="config-val">~/.config/aria/config.json</td><td>Apple Music 凭据文件</td></tr>
+      <tr><td><code>MAX_ALBUM_TRACKS</code></td><td class="config-val">30</td><td>每次专辑下载最大曲目数</td></tr>
+      <tr><td><code>MAX_BATCH_SIZE</code></td><td class="config-val">50</td><td>每次批量请求最大 ID 数</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- 页脚 -->
+<footer>
+  <div class="container">
+    <p><strong>aria</strong> &mdash; 使用 <a href="https://github.com/overkazaf/sidecar">sidecar</a> 进行 FairPlay 解密</p>
+    <p style="margin-top:8px">致敬 Apple Music 开源社区</p>
+  </div>
+</footer>
+
+</body>
+</html>
