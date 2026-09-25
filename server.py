@@ -595,6 +595,46 @@ def download_song(song_id: str):
 
 
 
+
+def _tag_m4a(path: str, song, artwork_size: int = 1200):
+    """Write iTunes metadata atoms into m4a using mutagen."""
+    try:
+        from mutagen.mp4 import MP4, MP4Cover
+        audio = MP4(path)
+        audio["\xa9nam"] = [song.title]
+        audio["\xa9ART"] = [song.artist]
+        audio["\xa9alb"] = [song.album]
+        if song.track_number:
+            audio["trkn"] = [(song.track_number, 0)]
+        if song.disc_number:
+            audio["disk"] = [(song.disc_number, 1)]
+        if song.isrc:
+            audio["----:com.apple.iTunes:ISRC"] = [song.isrc.encode()]
+        # Cover art from raw attributes
+        raw_attrs = (song.raw.get("attributes") or {})
+        artwork = raw_attrs.get("artwork") or {}
+        art_url = artwork.get("url", "")
+        if art_url:
+            art_url = art_url.replace("{w}", str(artwork_size)).replace("{h}", str(artwork_size))
+            try:
+                r = httpx.get(art_url, timeout=10, follow_redirects=True)
+                if r.status_code == 200 and len(r.content) > 100:
+                    fmt = MP4Cover.FORMAT_JPEG if r.content[:2] == b"\xff\xd8" else MP4Cover.FORMAT_PNG
+                    audio["covr"] = [MP4Cover(r.content, imageformat=fmt)]
+            except Exception:
+                pass
+        # Genre, composer, copyright from raw
+        genre_names = raw_attrs.get("genreNames") or []
+        if genre_names:
+            audio["\xa9gen"] = [genre_names[0]]
+        composer = raw_attrs.get("composerName") or ""
+        if composer:
+            audio["\xa9wrt"] = [composer]
+        audio.save()
+    except Exception as e:
+        import logging
+        logging.getLogger("server").warning("tag_m4a failed: %s", e)
+
 def _decrypt_via_pool(song_id, out_dir, storefront, auth_token, media_user_token):
     """Decrypt one track — non-persistent connection per track for stability."""
     from am_alac import decryptor as _dec, aria_rpc
@@ -620,6 +660,7 @@ def _decrypt_via_pool(song_id, out_dir, storefront, auth_token, media_user_token
 
     from am_alac import m4a_writer
     m4a_writer.patch_to_alac_m4a(prep.parsed, decrypted, out_path)
+    _tag_m4a(out_path, prep.song)
 
     return _dec.DecryptResult(
         song_id=song_id, out_path=out_path,
